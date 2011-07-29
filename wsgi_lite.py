@@ -39,6 +39,10 @@ def maybe_rewrap(app, wrapper):
             return rewrap(app, wrapper)
     return wrapper
 
+class WSGIViolation(AssertionError):
+    """A WSGI protocol violation has occurred"""
+
+
 def lite(app):
     """Wrap a WSGI Lite app for possible use in a plain WSGI server"""
 
@@ -72,10 +76,6 @@ def with_closing(app):
             register(b)
         return s, h, b
     return maybe_rewrap(app, wrapper)
-
-
-
-
 
 
 
@@ -162,9 +162,6 @@ def _with_write_support(app, environ, _start_response):
     result = greenlet(wrap).switch()    
     return result
 
-class WSGIViolation(AssertionError):
-    """A WSGI protocol violation has occurred"""
-
 class ResponseWrapper:
     """Push-back and close() handler for WSGI body iterators
 
@@ -188,15 +185,23 @@ class ResponseWrapper:
             yield data
         self.close()
 
-    _close = None
+    def __len__(self):
+        return len(self.result)
+
+    _close = _closed = None
 
     def close(self):
-        if self._close is not None:
+        if self._closed: return
+        self._closed = True
+        if self._closed is not None:
             self._close()
         if hasattr(self.result, 'close') and self.result.close != self._close:
             self.result.close()
-        del self._close
-        self.result = ()
+        self._close = None
+
+
+
+
 
 def wrap_response(result, first=None, close=None):
     if first is None and close is None:
@@ -214,11 +219,6 @@ def get_closer(environ, chain=None):
                 # XXX how to trap errors and clean up from these?
                 cleanups.pop(0).close()
         return close
-
-
-
-
-
 
 
 

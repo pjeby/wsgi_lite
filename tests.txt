@@ -1,0 +1,36 @@
+
+    >>> def hello_world(environ, start_response):
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     return ['Hello world!']
+
+    >>> from test_wsgi_lite import test
+
+    >>> test(hello_world)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 12
+    <BLANKLINE>
+    Hello world!
+
+    >>> from wsgi_lite import lite, lighten
+
+    >>> test(lighten(hello_world))
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 12
+    <BLANKLINE>
+    Hello world!
+
+    >>> def hello_lite(environ):
+    ...     return (
+    ...         '200 OK', [('Content-type','text/plain')],
+    ...         ['Hello world!']
+    ...     )
+
+    >>> test(lite(hello_lite))
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 12
+    <BLANKLINE>
+    Hello world!
+
