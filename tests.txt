@@ -1,9 +1,14 @@
+Standard WSGI Apps
+------------------
 
-    >>> def hello_world(environ, start_response):
-    ...     start_response('200 OK', [('Content-type','text/plain')])
-    ...     return ['Hello world!']
+We'll use the ``test()`` function to simulate a WSGI server::
 
     >>> from test_wsgi_lite import test
+
+    >>> def hello_world(environ, start_response):
+    ...     """Standard WSGI version of hello_world"""
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     return ['Hello world!']
 
     >>> test(hello_world)
     Status: 200 OK
@@ -12,7 +17,17 @@
     <BLANKLINE>
     Hello world!
 
+As you can see, it runs regular WSGI apps normally.  Now let's try some
+``@lite`` and ``lighten()`` apps::
+
     >>> from wsgi_lite import lite, lighten
+
+
+``lighten()``
+-------------
+
+Lightening a standard WSGI app leaves it still able to do normal WSGI, via
+a pass-through::
 
     >>> test(lighten(hello_world))
     Status: 200 OK
@@ -21,11 +36,48 @@
     <BLANKLINE>
     Hello world!
 
+Wrapped functions are roughly the same as their original in terms of
+attributes, docstrings, etc. (as long as either functools or DecoratorTools
+are available)::
+
+    >>> help(hello_world)
+    Help on function hello_world:
+    <BLANKLINE>
+    hello_world(environ, start_response)
+        Standard WSGI version of hello_world
+    <BLANKLINE>
+
+But the second argument is always optional, so that the lightened function
+can support being called with the single-argument protocol::
+
+    >>> help(lighten(hello_world))
+    Help on function hello_world:
+    <BLANKLINE>
+    hello_world(environ, start_response=None)
+        Standard WSGI version of hello_world
+    <BLANKLINE>
+
+Wrapping is idempotent, so lightening an already-lightened function returns
+the same function::
+
+    >>> hw = lighten(hello_world)
+    >>> lighten(hw) is hw
+    True
+
+
+``@lite``
+---------
+
+A "lite" app only takes an environ, and returns a status/headers/body triple::
+
     >>> def hello_lite(environ):
+    ...     """'lite' version of hello_world"""
     ...     return (
     ...         '200 OK', [('Content-type','text/plain')],
     ...         ['Hello world!']
     ...     )
+
+But if wrapped with ``@lite``, is still usable in a standard WSGI server::
 
     >>> test(lite(hello_lite))
     Status: 200 OK
@@ -33,4 +85,39 @@
     Content-Length: 12
     <BLANKLINE>
     Hello world!
+
+Because in this case, the wrapper *adds* an optional start_response parameter::
+
+    >>> help(lite(hello_lite))
+    Help on function hello_lite:
+    <BLANKLINE>
+    hello_lite(environ, start_response=None)
+        'lite' version of hello_world
+    <BLANKLINE>
+
+Instead of making an existing parameter optional::
+
+    >>> help(hello_lite)
+    Help on function hello_lite:
+    <BLANKLINE>
+    hello_lite(environ)
+        'lite' version of hello_world
+    <BLANKLINE>
+
+And as with ``lighten()``, ``@lite`` is idempotent::
+
+    >>> hw = lite(hello_lite)
+    >>> lite(hw) is hw
+    True
+
+Also, ``lighten()`` and ``@lite`` are idempotent to each other, as well as
+themselves::
+
+    >>> hw = lite(hello_lite)
+    >>> lighten(hw) is hw
+    True
+
+    >>> hw = lighten(hello_world)
+    >>> lite(hw) is hw
+    True
 
