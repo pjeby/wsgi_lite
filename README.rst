@@ -195,9 +195,10 @@ The ``wsgi_lite.register_close`` Extension
 ------------------------------------------
 
 WSGI Lite uses a WSGI server extension called ``wsgi_lite.register_close``,
-that lives in the application's `environ` variable.  The ``@lite`` decorator
-automatically adds this extension to the environment, if it's called from a
-WSGI 1 server or middleware, and the key doesn't already exist.
+that lives in the application's `environ` variable.  The ``@lite`` and
+``lighten()``decorators automatically add this extension to the environment, if
+they're called from a WSGI 1 server or middleware, and the key doesn't already
+exist.
 
 The value for this key is a callback function that takes one argument: an
 object whose ``close()`` method is to be called at the end of the request.  The
