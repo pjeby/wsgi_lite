@@ -1,8 +1,8 @@
+.. -*- restructuredtext -*-
+
 ==========================================
 Creating Simpler Middleware with WSGI Lite
 ==========================================
-
-.. -*- restructuredtext -*-
 
 Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
 
