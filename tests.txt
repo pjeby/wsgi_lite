@@ -47,8 +47,7 @@ are available)::
         Standard WSGI version of hello_world
     <BLANKLINE>
 
-But the second argument is always optional, so that the lightened function
-can support being called with the single-argument protocol::
+But the second argument is always optional::
 
     >>> help(lighten(hello_world))
     Help on function hello_world:
@@ -56,6 +55,16 @@ can support being called with the single-argument protocol::
     hello_world(environ, start_response=None)
         Standard WSGI version of hello_world
     <BLANKLINE>
+
+So that the lightened function can support being called with the single-
+argument protocol, as well as standard WSGI::
+
+    >>> to_close = []
+    >>> empty_env = {'wsgi_lite.register_close': to_close.append}
+
+    >>> lighten(hello_world)(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
 
 Wrapping is idempotent, so lightening an already-lightened function returns
 the same function::
@@ -104,7 +113,18 @@ Instead of making an existing parameter optional::
         'lite' version of hello_world
     <BLANKLINE>
 
-And as with ``lighten()``, ``@lite`` is idempotent::
+So that calling it with just one argument returns a status/headers/body tuple::
+
+    >>> lite(hello_lite)(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+just as was the case for the underlying function::
+
+    >>> hello_lite(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+
+Even so, as with ``lighten()``, ``@lite`` is idempotent::
 
     >>> hw = lite(hello_lite)
     >>> lite(hw) is hw

@@ -122,7 +122,7 @@ def lighten(app):
     return mark_lite(maybe_rewrap(app, wrapper))
 
 def _with_write_support(app, environ, _start_response):
-    if greenlet is None or not use_greenlet:
+    if greenlet is None or not use_greenlets:
         return app(environ, _start_response)
 
     # We use this variable to tell whether write() was called from app()
