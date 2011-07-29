@@ -6,30 +6,30 @@ Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
 
 ::
 
-    >>> from wsgi_lite import lite, lighten
+    from wsgi_lite import lite, lighten
     
-    >>> def latinator(app):
-    ...     @lite
-    ...     def middleware(environ):
-    ...         status, headers, body = app(environ)
-    ...         for name, value in headers:
-    ...             if name.lower() == 'content-type' and value == 'text/plain':
-    ...                 break
-    ...         else:
-    ...             # Not text/plain, pass the request through unchanged 
-    ...             return status, headers, body
-    ...                 
-    ...         # Strip content-length if present, else it'll be wrong
-    ...         headers = [
-    ...             (name, value) for name, value in headers
-    ...                 if name.lower() != 'content-length'
-    ...         ]
-    ...         return status, headers, (piglatin(data) for data in body)
-    ... 
-    ...     # Make sure that `app` can be invoked via the Lite protocol, even
-    ...     # if it's a standard WSGI 1 app:
-    ...     app = lighten(app)  
-    ...     return middleware
+    def latinator(app):
+        @lite
+        def middleware(environ):
+            status, headers, body = app(environ)
+            for name, value in headers:
+                if name.lower() == 'content-type' and value == 'text/plain':
+                    break
+            else:
+                # Not text/plain, pass the request through unchanged 
+                return status, headers, body
+                    
+            # Strip content-length if present, else it'll be wrong
+            headers = [
+                (name, value) for name, value in headers
+                    if name.lower() != 'content-length'
+            ]
+            return status, headers, (piglatin(data) for data in body)
+    
+        # Make sure that `app` can be invoked via the Lite protocol, even
+        # if it's a standard WSGI 1 app:
+        app = lighten(app)  
+        return middleware
 
 If you've seen the ``Latinator`` example from the WSGI PEP, you may recall that
 it's about three times this much code and needs two classes, just to do the job
@@ -60,15 +60,20 @@ Pretty neat, eh?  But the real magic comes in with the second decorator,
 ``lighten()``.  ``lighten()`` accepts either a ``@lite`` application or a
 WSGI 1 application, and returns a similarly flexible application object.  Just
 like the output of the ``@lite`` decorator, the resulting app object can be
-called with or without a ``start_response``, and the protocol it follows will
-vary accordingly.
+called with or without a ``start_response``, and the return protocol it follows
+will vary accordingly.
 
 This means that you can either pass a ``@lite`` app or a standard WSGI app
-to our ``latinator()`` middleware, and it'll work either way.  And, for
-efficiency, both ``@lite`` and ``lighten()`` are designed to be idempotent:
-calling them on already-converted apps has no effect, and if you call a
-wrapped application via its native protocol, no protocol conversion takes
-place.
+to our ``latinator()`` middleware, and it'll work either way.  And, you can
+supply a ``@lite`` or ``lighten()``-ed app to any standard WSGI server or
+middleware, and it'll Just Work.
+
+For efficiency, both ``@lite`` and ``lighten()`` are designed to be idempotent:
+calling them on already-converted applications returns the app you passed in,
+with no extra wrapping.  And, if you call a wrapped application via its native
+protocol, no protocol conversion takes place - the original app just gets
+called without any conversion overhead.  So, feel free to use both decorators
+early and often!
 
 
 ``close()`` and Resource Cleanups
@@ -99,6 +104,8 @@ cleanup when doing so, is one of the reasons I'm always saying it.)
 Anyway, if you *must* produce your response in chunks, *and* you need to
 release some resources as soon as the response is finished,  you need to use
 the ``@wsgi_lite.with_closing`` decorator, e.g::
+
+    from wsgi_lite import lite, with_closing
 
     @lite
     @with_closing
@@ -174,10 +181,8 @@ body iterator, and be happy that you don't need to know anything more.  ;-)
 Well, actually, you do need to know ONE more thing...  If your outermost
 ``@lite`` application is wrapped by any off-the-shelf WSGI middleware, you
 probably want to wrap the outermost piece of middleware with a ``lighten()``
-call.
-
-This will let WSGI Lite make sure that *your* ``close()`` methods get called,
-even if the middleware that wraps you is broken.
+call.  This will let WSGI Lite make sure that *your* ``close()`` methods get
+called, even if the middleware that wraps you is broken.
 
 (Technically speaking, of course, there's no way to be *sure* you're not being
 wrapped by middleware, so it's not really a cure-all unless your WSGI server
