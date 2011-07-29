@@ -324,10 +324,10 @@ Current Status
 --------------
 
 The code in this repository is experi-mental, and possibly very-mental or
-just plain detri-mental.  It is not tested in any serious way as yet, or even
-a non-serious way.  I've thrown this out there for people to see and play with
-early.  Stuff may change, break, or this could all have been a really stupid
-idea that doesn't actually work.  You have been warned.
+just plain detri-mental.  It is not tested in any serious way as yet: just some
+very basic "smoke tests".  I've thrown this out there for people to see and
+play with early.  Stuff may change, break, or this could all have been a really
+stupid idea that doesn't actually work.  You have been warned.
 
 (Oh, and it's under an ASF license, since that's what the PSF uses for
 contributions... i.e., I anticipate this potentially becoming PEPpable and
