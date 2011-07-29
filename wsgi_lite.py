@@ -1,7 +1,7 @@
 __all__ = [
-    'lite', 'lighten', 'is_lite', 'mark_lite', 'ResponseWrapper',
-    'WSGIViolation',
+    'lite', 'lighten', 'with_closing', 'is_lite', 'mark_lite', 'WSGIViolation',
 ]
+
 try:
     from functools import update_wrapper
 except ImportError:
@@ -48,30 +48,30 @@ def lite(app):
 
     def wrapper(environ, start_response=None):
         if start_response is None:
-            # Called via lite, - just pass through as-is
+            # Called via lite, just pass through as-is
             return app(environ) 
 
         # Support wsgi_lite.add_cleanup() callback
-        if 'wsgi_lite.add_cleanup' in environ:
-            close = None
-        else:
-            cleanups = []
-            environ['wsgi_lite.add_cleanup'] = cleanups.append
-            def close():
-                if hasattr(body, 'close'):
-                    body.close()
-                while cleanups:
-                    # XXX how to trap errors and clean up from these?
-                    cleanups.pop(0)()
-                    
+        close = get_closer(environ)                
         s, h, b = app(environ)
         start_response(s, h)
-        if close:
-            body = ResponseWrapper(b, close=close)
-        return b
+        return wrap_response(b, close=close)
 
     return mark_lite(maybe_rewrap(app, wrapper))
 
+
+def with_closing(app):
+    """Mark an application as needing iterator cleanup
+
+    NOTE: this decorator *must* come *after* ``@lite`` in the decorator list!
+    """
+    def wrapper(environ):
+        register = environ['wsgi_lite.register_close']
+        s, h, b = app(environ)
+        if hasattr(b, 'close'):
+            register(b)
+        return s, h, b
+    return maybe_rewrap(app, wrapper)
 
 
 
@@ -88,11 +88,11 @@ def lighten(app):
 
     def wrapper(environ, start_response=None):
         if start_response is not None:
-            # Called from Standard WSGI; just pass through
-            return app(environ, start_response)
+            # Called from Standard WSGI - we're just passing through
+            close = get_closer(environ)  # enable extension before we go
+            return wrap_response(app(environ, start_response), close=close)
 
         headerinfo = []
-
         def write(data):
             raise NotImplementedError("Greenlets are disabled or missing")
 
@@ -102,7 +102,7 @@ def lighten(app):
             headerinfo[:] = status, headers
             return write
 
-        add_cleanup = environ['wsgi_lite.add_cleanup']
+        register = environ['wsgi_lite.register_close']
         result = _with_write_support(app, environ, start_response)
         if not headerinfo:
             for data in result:
@@ -114,7 +114,7 @@ def lighten(app):
                     result = ResponseWrapper(result, data)
                     break
         if hasattr(result, 'close'):
-            add_cleanup(result.close)
+            register(result)
 
         headerinfo.append(result)
         return tuple(headerinfo)
@@ -165,14 +165,13 @@ def _with_write_support(app, environ, _start_response):
 class WSGIViolation(AssertionError):
     """A WSGI protocol violation has occurred"""
 
-
 class ResponseWrapper:
     """Push-back and close() handler for WSGI body iterators
 
     This lets you wrap an altered body iterator in such a way that its
     original close() method is called at most once.  You can also prepend
     a single piece of body text, or manually specify an alternative close()
-    function.
+    function that will be called before the wrapped iterator's close().
     """
 
     def __init__(self, result, first=None, close=None):
@@ -180,8 +179,6 @@ class ResponseWrapper:
         self.result = result
         if close is not None:
             self._close = close
-        elif hasattr(result, 'close'):
-            self._close = result.close
 
     def __iter__(self):
         if self.first is not None:
@@ -196,7 +193,51 @@ class ResponseWrapper:
     def close(self):
         if self._close is not None:
             self._close()
-            del self._close
+        if hasattr(self.result, 'close') and self.result.close != self._close:
+            self.result.close()
+        del self._close
+        self.result = ()
+
+def wrap_response(result, first=None, close=None):
+    if first is None and close is None:
+        return result
+    return ResponseWrapper(result, first, close)
+
+def get_closer(environ, chain=None):
+    """Add a ``wsgi_lite.register_close`` key and return a callback or None"""
+
+    if 'wsgi_lite.register_close' not in environ:
+        cleanups = []
+        environ['wsgi_lite.register_close'] = cleanups.append
+        def close():
+            while cleanups:
+                # XXX how to trap errors and clean up from these?
+                cleanups.pop(0).close()
+        return close
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
