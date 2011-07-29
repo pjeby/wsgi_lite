@@ -11,7 +11,7 @@ PACKAGE_VERSION = "0.5a1"
 
 def get_description():
     # Get our long description from the documentation
-    f = file('README')
+    f = file('README.rst')
     lines = []
     for line in f:
         if not line.strip():

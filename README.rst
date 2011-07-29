@@ -1,5 +1,3 @@
-.. -*- restructuredtext -*-
-
 ==========================================
 Creating Simpler Middleware with WSGI Lite
 ==========================================
