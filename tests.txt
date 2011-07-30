@@ -142,6 +142,43 @@ themselves::
     True
 
 
+Middleware
+----------
+
+Now let's try using some WSGI Lite middleware built with ``@lite`` and
+``lighten()``.  We'll use the ``latinator`` example from our README file::
+
+    >>> from test_wsgi_lite import latinator
+
+First, wrapping plain old WSGI::
+
+    >>> test(latinator(hello_world))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+Then, wrapping a ``@lite`` application::
+
+    >>> test(latinator(lite(hello_lite)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+And a ``lighten()``-ed one::
+
+    >>> test(latinator(lighten(hello_world)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+As you can see, when you write middleware using ``@lite`` to wrap the
+middleware, and ``lighten()`` to wrap the called app, all of the hard bits
+of WSGI response processing get abstracted away.
+
+
 To-Test
 -------
 

@@ -1,3 +1,44 @@
+def piglatin(text):
+    """Quick and dirty, regex-based pig latin converter"""
+    pl_re="""
+    (?ix)       # Verbose processing, ignore case
+    (\W|^)      # Start of word or string
+    (?! (?: the|\w{0,2})(?:\W|$)) # Don't match 'the' or two-letter words
+    (\w*?)([aeiouy]\w*)
+    (?= \W|$)   # End of word or string
+    """
+    import re
+    def cvt(m):
+        pre, head, tail = m.groups()
+        return pre+tail+(head or 'w')+'ay'
+    return re.sub(pl_re, cvt, text)
+    
+
+def latinator(app):
+    from wsgi_lite import lite, lighten
+
+    def middleware(environ):
+        status, headers, body = app(environ)
+        for name, value in headers:
+            if name.lower() == 'content-type' and value == 'text/plain':
+                break
+        else:
+            # Not text/plain, pass it through unchanged 
+            return status, headers, body
+                
+        # Strip content-length if present, else it'll be wrong
+        headers = [
+            (name, value) for name, value in headers
+                if name.lower() != 'content-length'
+        ]
+        return status, headers, (piglatin(data) for data in body)
+
+    # Make sure that `app` can be invoked via the Lite protocol
+    app = lighten(app)  
+    return lite(middleware)
+
+
+
 def test(app, environ={}, form={}, _debug=True, **kw):
     """Print the output of a WSGI app
 
@@ -96,8 +137,6 @@ def additional_tests():
                     | doctest.REPORT_ONLY_FIRST_FAILURE,
         *tests
     )
-
-
 
 
 
