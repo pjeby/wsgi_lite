@@ -307,9 +307,16 @@ where they were opened, or you are 100% positive they can't be accessed from
 a sub-app.  Otherwise, just call ``closing()`` on them as soon as you allocate
 them.
 
+**Don't**, however, call ``closing()`` on objects that don't belong to your
+function.  If you didn't allocate it, closing it is somebody else's job.  In
+particular, you don't need to call ``closing()`` on any WSGI  or WSGI Lite
+response bodies, because ``lighten()`` takes care of that for you, and you'll
+end up double-closing things.
+
 Okay, so *that* was the bad news.  Not that bad, though, is it?  You need
-another decorator, and you need to pay a little bit of attention to the order
-of resource closing.  That's it!
+another decorator, you need to pay a little bit of attention to the order
+of resource closing, and you need to register your own objects (and *only*
+your objects) for closing.  That's it!
 
 Really, the rest of this section is all about what will happen if you *don't*
 use the decorator, or if you try to do resource cleanup in a standard WSGI app
