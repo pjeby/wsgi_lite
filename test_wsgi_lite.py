@@ -31,13 +31,13 @@ def latinator(app):
             (name, value) for name, value in headers
                 if name.lower() != 'content-length'
         ]
-        return status, headers, (piglatin(data) for data in body)
+        def pliter(body):   # Python 2.3 doesn't do generator expressions
+            for data in body: yield piglatin(data)
+        return status, headers, pliter(body)
 
     # Make sure that `app` can be invoked via the Lite protocol
     app = lighten(app)  
     return lite(middleware)
-
-
 
 def test(app, environ={}, form={}, _debug=True, **kw):
     """Print the output of a WSGI app
