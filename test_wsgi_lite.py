@@ -122,7 +122,10 @@ def test(app, environ={}, form={}, _debug=True, **kw):
 
 
 def additional_tests():
+    import sys
     tests = ['tests.txt']
+    if sys.version>='2.4':
+        tests.append('README.rst')
     try:
         from greenlet import greenlet
     except ImportError:

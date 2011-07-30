@@ -1,5 +1,6 @@
 __all__ = [
-    'lite', 'lighten', 'with_closing', 'is_lite', 'mark_lite', 'WSGIViolation',
+    'lite', 'lighten', 'bind', 'with_closing', 'is_lite', 'mark_lite',
+    'WSGIViolation',
 ]
 
 try:
@@ -38,6 +39,87 @@ def maybe_rewrap(app, wrapper):
         wrapper.__dict__.update(app.__dict__)
     return wrapper
 
+def iter_bindings(rule, environ):
+    """Yield possible matches of binding rule `rule` against `environ`
+
+    A `rule` may be a string (``basestring`` instance), callable, or iterable.
+    If a string, it's looked up in `environ`, and the result yielded if found.
+    If it's a callable, it's invoked on the environ, and the result iterated
+    over.  (That is, the callable must return a possibly-empty sequence.)
+    Otherwise, if the rule has an ``__iter__`` method, it's looped over, and
+    each element is treated as a rule, recursively.
+    """
+    if isinstance(rule, basestring):
+        if rule in environ:
+            yield environ[rule]
+    elif callable(rule):
+        for result in rule(environ):
+            yield result
+    elif hasattr(rule, '__iter__'):
+        for r in rule:
+            for result in iter_bindings(r, environ):
+                yield result
+    else:
+        raise TypeError(
+            "@bind value %r is not a tuple, callable, or string" % (v,)
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+def bind(__name__=None, __doc__=None, __module__=None, **kw):
+    """Bind environ keys to keyword arguments"""
+
+    if isinstance(__name__, function) or not kw:
+        raise TypeError("Usage is @bind(argname='environ key',...)")
+
+    def decorate(func):
+        def wrapper(environ, **args):
+            for argname, rule in kw.iteritems():
+                for value in iter_bindings(rule, environ):
+                    args[argname] = value
+                    break   # take only first matching value, if any
+            return func(environ, **args)
+
+        if is_lite(func):
+            raise TypeError("This decorator must be placed *after* @lite")
+
+        if isinstance(func, function):
+            if func.func_code is wrapper.func_code:
+                (inner_kw, func) = func.__wsgilite_binding__
+                for k in inner_kw:
+                    if k in kw:
+                        raise TypeError(
+                            "Rebound argument %r from %r to %r" %
+                            (k, inner_kw[k], kw[k])
+                        )
+                kw.update(inner_kw) 
+        if isinstance(func, function):
+            argnames = func.func_code.co_varnames[:func.func_code.co_argcount]
+            for k in kw:
+                if k not in argnames:
+                    raise TypeError("%r has no %r argument" % (func, k))            
+        wrapper = maybe_rewrap(func, wrapper)
+        wrapper.__wsgilite_binding__ = kw, func
+        
+    decorate = renamed(decorate, __name__ or 'with_'+'_'.join(kw))
+    decorate.__doc__ = __doc__
+    decorate.__module__ = __module__
+    return decorate
+
 
 class WSGIViolation(AssertionError):
     """A WSGI protocol violation has occurred"""
@@ -64,18 +146,18 @@ def lite(app):
     return mark_lite(maybe_rewrap(app, wrapper))
 
 
-def with_closing(app):
-    """Mark an application as needing iterator cleanup
-
+with_closing = bind('with_closing', 
+    """Provide ``closing()`` API for ensuring ``close()`` methods are called::
+    
+        @lite
+        @with_closing   # <- must be *after* lite in the list
+        def my_app(environ, closing):     # <- arg must be named closing
+            return status, header, closing(body)
+            
     NOTE: this decorator *must* come *after* ``@lite`` in the decorator list!
-    """
-    def wrapper(environ):
-        register = environ['wsgi_lite.register_close']
-        s, h, b = app(environ)
-        if hasattr(b, 'close'):
-            register(b)
-        return s, h, b
-    return maybe_rewrap(app, wrapper)
+    """,
+    closing = 'wsgi_lite.register_close'
+)
 
 
 
@@ -208,24 +290,24 @@ def wrap_response(result, first=None, close=None):
         return result
     return ResponseWrapper(result, first, close)
 
+
 def get_closer(environ, chain=None):
     """Add a ``wsgi_lite.register_close`` key and return a callback or None"""
 
     if 'wsgi_lite.register_close' not in environ:
+
         cleanups = []
-        environ['wsgi_lite.register_close'] = cleanups.append
+        def closing(item):
+            cleanups.append(item)
+            return item
+
+        environ['wsgi_lite.register_close'] = closing
+
         def close():
             while cleanups:
                 # XXX how to trap errors and clean up from these?
                 cleanups.pop(0).close()
         return close
-
-
-
-
-
-
-
 
 
 

@@ -214,6 +214,19 @@ Just to be sure, though, let's check our WSGI compliance out a bit::
 To-Test
 -------
 
+``@bind``:
+  * names/docstrings
+  * stacking
+  * keyword arg/func-as-name checking
+  * rebind checking
+  * argument name checking
+  * after-lite checking
+  * default args processing
+  * callables
+  * tuples
+  * unsupported rule errors
+    * changing child environ doesn't affect parent
+  
 lighten():
   * Empty items yielded before start_response should still work
   * (App whose body is a generator, too)
@@ -225,10 +238,8 @@ lighten():
 Closing in general:
   * registered closables are closed by standard WSGI close() at outermost
     "lite"-supporting decorator/middleware
-  * @with_closing:
-    * changing child environ doesn't affect parent
-    * only iterators w/close methods are registered
-    * registration is innermost-first
+  * registered item is returned
+  * @with_closing binds it
 
 Middleware and WSGI compliance:
   * Multi-set of headers w/out exc_info raises error
