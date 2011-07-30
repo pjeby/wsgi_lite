@@ -141,3 +141,39 @@ themselves::
     >>> lite(hw) is hw
     True
 
+
+To-Test
+-------
+
+lighten():
+  * Empty items yielded before start_response should still work
+  * (App whose body is a generator, too)
+  * write() tests (greenlets required for most):
+    * Raise error if greenlets disabled and write() called
+    * Single write() and start_response() in main request, empty iterator
+    * Multiple write() in main request, non-empty iterator w/close()
+  * register_closer extension available in app's environ
+
+Closing in general:
+  * registered closables are closed by standard WSGI close() at outermost
+    "lite"-supporting decorator/middleware
+  * @with_closing:
+    * changing child environ doesn't affect parent
+    * only iterators w/close methods are registered
+    * registration is innermost-first
+
+Middleware and WSGI compliance:
+  * "latinator" re-implementation
+    * full wsgiref.validate on both sides
+    * wrap both lite and lightened
+    * call with WSGI and lite protocols
+  * write() from body iterator raises error
+  * Multi-set of headers w/out exc_info raises error
+  * Non-empty pre-start yield raises error
+
+Response Wrapping:
+ * close() only happens once
+ * len() passes through to wrapped iterator
+ * pushbacks
+ * custom extra close
+
