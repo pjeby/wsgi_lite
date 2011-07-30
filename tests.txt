@@ -158,13 +158,17 @@ First, wrapping plain old WSGI::
     <BLANKLINE>
     elloHay orldway!
 
-Then, wrapping a ``@lite`` application::
+Then, wrapping a ``@lite`` application (called via WSGI or WSGI Lite)::
 
     >>> test(latinator(lite(hello_lite)))
     Status: 200 OK
     Content-type: text/plain
     <BLANKLINE>
     elloHay orldway!
+
+    >>> s, h, b = latinator(lite(hello_lite))(empty_env)
+    >>> s, h, [''.join(b)]
+    ('200 OK', [('Content-type', 'text/plain')], ['elloHay orldway!'])
 
 And a ``lighten()``-ed one::
 
@@ -174,9 +178,37 @@ And a ``lighten()``-ed one::
     <BLANKLINE>
     elloHay orldway!
 
+    >>> s, h, b = latinator(lighten(hello_world))(empty_env)
+    >>> s, h, [''.join(b)]
+    ('200 OK', [('Content-type', 'text/plain')], ['elloHay orldway!'])
+
+
 As you can see, when you write middleware using ``@lite`` to wrap the
 middleware, and ``lighten()`` to wrap the called app, all of the hard bits
 of WSGI response processing get abstracted away.
+
+Just to be sure, though, let's check our WSGI compliance out a bit::
+
+    >>> from wsgiref.validate import validator
+    >>> vtest = lambda *args, **kw: test(QUERY_STRING='', *args, **kw)
+
+    >>> vtest(validator(latinator(validator(hello_world))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(latinator(validator(lighten(hello_world)))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(latinator(validator(lite(hello_lite)))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
 
 
 To-Test
@@ -199,11 +231,6 @@ Closing in general:
     * registration is innermost-first
 
 Middleware and WSGI compliance:
-  * "latinator" re-implementation
-    * full wsgiref.validate on both sides
-    * wrap both lite and lightened
-    * call with WSGI and lite protocols
-  * write() from body iterator raises error
   * Multi-set of headers w/out exc_info raises error
   * Non-empty pre-start yield raises error
 

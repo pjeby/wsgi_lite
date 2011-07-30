@@ -25,6 +25,11 @@ scenarios::
 
     >>> from test_wsgi_lite import latinator
 
+And a handy validator object to check WSGI compliance::
+
+    >>> from wsgiref.validate import validator
+    >>> vtest = lambda *args, **kw: test(QUERY_STRING='', *args, **kw)
+
 
 Basic write()s with empty iterators
 ===================================
@@ -62,6 +67,24 @@ Single-Write
     <BLANKLINE>
     elloHay orldway!
 
+    >>> vtest(validator(dilute(validator(basic_write))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> vtest(validator(latinator(validator(dilute(validator(basic_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(dilute(validator(latinator(validator(basic_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
 
 Multi-Write
 ------------
@@ -91,6 +114,30 @@ Multi-Write
     elloHay orldway!
 
     >>> test(dilute(latinator(double_write)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> test(validator(double_write), QUERY_STRING='')
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> vtest(validator(dilute(validator(double_write))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> vtest(validator(latinator(validator(dilute(validator(double_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(dilute(validator(latinator(validator(double_write))))))
     Status: 200 OK
     Content-type: text/plain
     <BLANKLINE>
