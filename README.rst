@@ -210,6 +210,23 @@ original vision for how WSGI was supposed to help dissolve web frameworks into
 *web libraries*.  (That is, things you can easily mix and match without 
 every piece of code you use having to come from the same place.)
 
+Callables that you use with ``@bind`` don't even have to return something from
+the environment or wrap the environment, by the way - they can just be things
+that *use* something from the environment.  For example, you could bind
+parameters to temporary files that will be automatically closed when the
+request is finished::
+
+    >>> def mktemp(environ):
+    ...     closing = environ['wsgi_lite.register_close']
+    ...     yield closing(tempfile(etc[...]))
+
+    >>> @bind(tmp1=mktemp, tmp2=mktemp)
+    ... def do_something(environ, tmp1, tmp2):
+    ...     """Write stuff to tmp1 and tmp2"""
+
+What's ``wsgi_lite.register_close``, you ask?  Well, that's something we're
+going to talk about in the next two sections.
+
 
 ``close()`` and Resource Cleanups
 ---------------------------------
@@ -267,18 +284,30 @@ method will be called at the end of the request, even if the browser
 disconnects or a piece of middleware throws away your iterator to use its own
 instead.
 
-Do note that the *order* in which you make ``closing()`` calls is important,
-if you call it more than once.  Items are closed in the order they are
-registered, so if you register a resource before calling another app, then that
-resource might be closed before the app's cleanup is run...  and that could be
-a bad thing if the app got access to the resource somehow.  So, it's best if
-you do all your ``closing()`` calls *after* any child apps have had a chance
-to do theirs.  (Really, the simplest thing is probably going to be to just
-doing all your cleanup in a body iterator's ``try/finally``, anyway.)
+An important note: items registered with ``closing()`` are closed in *reverse*
+registration order.  This means that if the ``my_body()`` iterator above is
+looping over a sub-app's response, then its ``finally`` block may be run
+**before** any similar ``finally`` block in the sub-app.  Therefore, your
+``finally`` block **must not close** any resources the sub-app might be using!
+
+So, if you are passing any resources down to another WSGI application, be
+sure to call ``closing()`` on them *before* calling the other application, and
+then *don't* close them in your body iterator.  Example::
+
+    @lite
+    @with_closing
+    def my_app(environ, closing):
+        environ['some.key'] = closing(some_resource())
+        return subapp(environ)
+
+In other words, you should *only* close resources in your iterator if that's
+where they were opened, or you are 100% positive they can't be accessed from
+a sub-app.  Otherwise, just call ``closing()`` on them as soon as you allocate
+them.
 
 Okay, so *that* was the bad news.  Not that bad, though, is it?  You need
-another decorator, and you need to pay attention to the order of resource
-closing.  That's it!
+another decorator, and you need to pay a little bit of attention to the order
+of resource closing.  That's it!
 
 Really, the rest of this section is all about what will happen if you *don't*
 use the decorator, or if you try to do resource cleanup in a standard WSGI app
@@ -364,16 +393,22 @@ Anyway, the idea here is that a server (or middleware component) accepts these
 registrations, and then closes all the resources (or generators) when the
 request is finished.
 
-Objects are closed in the order in which they're registered, so that inner
-apps' resources are released prior to middleware resources being released.
-(In other words, if an app is using a resource that it received from middleware
-via its `environ`, that resource will still be usable during the app's
-``close()`` processing or ``finally`` blocks.)
+Objects are closed in the reverse order from which they're registered, so that
+inner apps' resources are released prior to middleware-provided resources being
+released.  (In other words, if an app is using a resource that it received from
+middleware via its `environ`, that resource will still be usable during the
+app's ``close()`` processing or ``finally`` blocks.)
 
 Objects registered with this extension **must** have ``close()`` methods, and
 the methods **must** be idempotent: that is, it must be safe to call them
 more than once.  (That is, calling ``close()`` a second time **must not**
 raise an error.)
+
+``close()`` methods are explicitly allowed to registering additional objects to
+be closed: such objects are effectively "pushed" onto the stack of objects to
+be closed, with the last added object being closed first.  (Note that this
+implies that a ``close()`` method **must not** directly or indirectly
+re-register itself, as this would create an infinite loop of closing calls.)
 
 Currently, the handling of errors raised by ``close()`` methods is undefined,
 in that WSGI Lite doesn't yet handle them.  ;-)  (When I have some idea of how
@@ -388,28 +423,10 @@ middleware that already implements this extension, it'll make use of the
 provided implementation, instead of adding its own.)
 
 Now, if for some reason you want to use this extension directly in your code
-without using ``@with_closing``, *please* remember the following two caveats:
-
-* The WSGI spec allows called applications to modify the `environ`.  This
-  means that you **must** retrieve the extension *before* you pass the
-  `environ` to another app.  (That's why we have ``@bind``, remember?)
-
-* Since you don't usually have the object with the ``close()`` method ready
-  until near the end of request processing, *and* because the resources might
-  be used by any apps you call, you **should** wait until after the child
-  request has had a chance to register its resources, before you register
-  yours.
-
-These two requirements are in fundamental conflict: you must *retrieve* the
-extension as early as possible, but *use* it as late as possible.  So, if
-you're not using ``@with_closing``, be sure to do something like this instead::
-
-    def an_app(environ, start_response):
-        closing = environ['wsgi_lite.register_close']
-        ...
-        return closing(someiter)
-
-Got it?  Good.
+without using ``@with_closing``, *please* remember that the WSGI spec allows
+called applications to modify the `environ`.  This means that you **must**
+retrieve the extension *before* you pass the `environ` to another app.  (That's
+why we have ``@bind``, remember?)
 
 
 Other Protocol Details

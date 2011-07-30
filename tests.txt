@@ -240,6 +240,7 @@ Closing in general:
     "lite"-supporting decorator/middleware
   * registered item is returned
   * @with_closing binds it
+  * Correct closing order
 
 Middleware and WSGI compliance:
   * Multi-set of headers w/out exc_info raises error
@@ -249,5 +250,5 @@ Response Wrapping:
  * close() only happens once
  * len() passes through to wrapped iterator
  * pushbacks
- * custom extra close
+ * custom extra close - correct order
 

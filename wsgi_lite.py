@@ -306,7 +306,7 @@ def get_closer(environ, chain=None):
         def close():
             while cleanups:
                 # XXX how to trap errors and clean up from these?
-                cleanups.pop(0).close()
+                cleanups.pop().close()
         return close
 
 
