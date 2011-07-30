@@ -1,4 +1,4 @@
-def test(app, environ={}, form={}, **kw):
+def test(app, environ={}, form={}, _debug=True, **kw):
     """Print the output of a WSGI app
 
     Runs `app` as a WSGI application and prints its output.  If an untrapped
@@ -24,7 +24,7 @@ def test(app, environ={}, form={}, **kw):
     keyword arguments, are initialized to default values using the
     ``wsgiref.util.setup_testing_defaults()`` function.
     """
-
+    import sys
     from wsgiref.util import setup_testing_defaults
     from wsgiref.handlers import BaseCGIHandler
     from StringIO import StringIO
@@ -55,19 +55,19 @@ def test(app, environ={}, form={}, **kw):
     setup_testing_defaults(environ)
     stdout = StringIO()
     stderr = environ['wsgi.errors']
-
     def wrapper(env, start):
         try:
             return app(env, start)
         except:
-            stdout = sys.stdout
-            try:
-                if stdout is not sys.__stdout__:
-                    sys.stdout = sys.__stdout__
-                import pdb
-                pdb.post_mortem(sys.exc_info()[2])
-            finally:
-                sys.stdout = stdout
+            if _debug:
+                stdout = sys.stdout
+                try:
+                    if stdout is not sys.__stdout__:
+                        sys.stdout = sys.__stdout__
+                    import pdb
+                    pdb.post_mortem(sys.exc_info()[2])
+                finally:
+                    sys.stdout = stdout
             raise
 
     BaseCGIHandler(
@@ -81,19 +81,21 @@ def test(app, environ={}, form={}, **kw):
 
 
 def additional_tests():
+    tests = ['tests.txt']
+    try:
+        from greenlet import greenlet
+    except ImportError:
+        pass
+    else:
+        tests.append('greenlet-tests.txt')
+
     import doctest
     return doctest.DocFileSuite(
-        'tests.txt',
-        optionflags=doctest.ELLIPSIS|doctest.REPORT_ONLY_FIRST_FAILURE,
+        optionflags = doctest.ELLIPSIS
+                    | doctest.NORMALIZE_WHITESPACE
+                    | doctest.REPORT_ONLY_FIRST_FAILURE,
+        *tests
     )
-
-
-
-
-
-
-
-
 
 
 

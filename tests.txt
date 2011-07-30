@@ -150,7 +150,6 @@ lighten():
   * (App whose body is a generator, too)
   * write() tests (greenlets required for most):
     * Raise error if greenlets disabled and write() called
-    * Single write() and start_response() in main request, empty iterator
     * Multiple write() in main request, non-empty iterator w/close()
   * register_closer extension available in app's environ
 

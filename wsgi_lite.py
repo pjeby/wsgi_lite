@@ -19,7 +19,10 @@ def is_lite(app):
     return getattr(app, '__wsgi_lite__', False)
 
 def _iter_greenlet(g=None):
-    while g: yield g.switch()
+    while g:
+        v = g.switch()
+        if v is not None:
+            yield v
 
 from new import function
 def renamed(f, name):
@@ -34,6 +37,7 @@ def maybe_rewrap(app, wrapper):
         wrapper.__doc__    = app.__doc__
         wrapper.__dict__.update(app.__dict__)
     return wrapper
+
 
 class WSGIViolation(AssertionError):
     """A WSGI protocol violation has occurred"""
@@ -72,10 +76,6 @@ def with_closing(app):
             register(b)
         return s, h, b
     return maybe_rewrap(app, wrapper)
-
-
-
-
 
 
 
@@ -191,7 +191,7 @@ class ResponseWrapper:
     _close = _closed = None
 
     def close(self):
-        if self._closed is not None:
+        if self._close is not None:
             self._close()
             del self._close
         if not self._closed:

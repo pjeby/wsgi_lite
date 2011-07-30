@@ -1,0 +1,107 @@
+----------------------------------
+Greenlet-Based Support for write()
+----------------------------------
+
+We need greenlet use activated for these tests to succeed::
+
+    >>> import wsgi_lite
+    >>> wsgi_lite.use_greenlets = True
+
+and to perform the tests, we need a wrapper to convert a standard WSGI app to
+"lite" and back again::
+
+    >>> from wsgi_lite import lite, lighten
+    >>> from test_wsgi_lite import test
+
+    >>> def dilute(app):
+    ...     """Wrap a WSGI 1 app in a forced WSGI Lite invocation"""
+    ...     app = lighten(app)
+    ...     def null(environ):
+    ...         return app(environ)
+    ...     return lite(null)
+
+
+Basic write()s with empty iterators
+===================================
+
+
+Single-Write
+------------
+
+    >>> def basic_write(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello world!')
+    ...     return []
+
+    >>> test(basic_write)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(dilute(basic_write))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+
+Multi-Write
+------------
+
+    >>> def double_write(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello ')
+    ...     write('world!')
+    ...     return []
+
+    >>> test(double_write)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(dilute(double_write))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+
+Mixed write() and iteration
+===========================
+
+
+Calling write() during iteration
+--------------------------------
+
+It's a spec violation  to call write() from your body iterator, even though
+most servers don't care::
+
+    >>> def empty_writerator(environ, start_response):
+    ...     """This technically violates the WSGI spec"""
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello world!')
+    ...     if False: yield ''
+
+    >>> test(empty_writerator)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(dilute(empty_writerator), _debug=False)
+    Status: 500 Dude, this is whack!
+    Content-Type: text/plain
+    Content-Length: 59
+    <BLANKLINE>
+    A server error occurred.  Please contact the administrator.
+    --- Log Output ---
+    Traceback (most recent call last):
+      ...
+    WSGIViolation: Applications MUST NOT invoke write() from within
+                   their return iterable - see PEP 333/3333
+    <BLANKLINE>
+
+
+
