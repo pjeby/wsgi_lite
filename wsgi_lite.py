@@ -191,13 +191,13 @@ class ResponseWrapper:
     _close = _closed = None
 
     def close(self):
-        if self._closed: return
-        self._closed = True
         if self._closed is not None:
             self._close()
-        if hasattr(self.result, 'close') and self.result.close != self._close:
-            self.result.close()
-        self._close = None
+            del self._close
+        if not self._closed:
+            self._closed = True
+            if hasattr(self.result, 'close'):
+                self.result.close()
 
 
 
