@@ -100,8 +100,8 @@ like ``wsgi.file_wrapper`` or ``wsgiorg.routing_args``, it might end up
 reading the child application's extensions, rather than those intended for the
 middleware itself.
 
-To help handle these cases, WSGI Lite includes the ``@bind`` decorator that
-makes it much easier to do it the right way::
+To help handle these cases, WSGI Lite includes a ``@bind`` decorator that makes
+it *much* easier to do things the right way::
 
     >>> from wsgi_lite import lite, bind
     
@@ -114,15 +114,15 @@ makes it much easier to do it the right way::
 
 The ``@bind`` decorator takes keyword arguments whose argument names match
 argument names on the decorated function, and automatically extracts the
-matching keys from the `environ`, and passes them as keyword arguments to the
+matching keys from the `environ`, passing them on as keyword arguments to the
 decorated function.  This automatically ensures that you aren't using
 possibly-corrupted keys from your child app(s), *and* lets you specify default
 values (via your function's defaults).
 
-Note that ``@bind`` must always come **after** the ``@lite`` decorator, since
-your app or middleware needs to support the standard WSGI calling protocol.
-(And the signature of the decorated function is checked to make sure it has
-all the argument names that were passed to ``@bind``.)
+Note that ``@bind`` must always come **after** the ``@lite`` decorator, because
+the function returned by ``@lite`` doesn't accept any keyword arguments. (Also,
+``@bind`` checks your function's signature to make sure it has arguments with
+names matching the ones you gave to ``@bind``!)
 
 As a convenience for frequently used extensions or keys, you can save ``bind``
 calls and give them names, for example::
@@ -134,15 +134,16 @@ calls and give them names, for example::
     ... def middleware(envrion, routing=((),{})):
     ...     """Some sort of middleware"""
 
-And you can even stack them, or give them names and docstrings::
+And you can even stack them, or give them names, docstrings, and specify what
+module you defined them in::
 
     >>> with_path = bind(
-    ...     'with_path', "Add a `path` arg for ``PATH_INFO``",
+    ...     'with_path', "Add a `path` arg for ``PATH_INFO``", "__main__",
     ...     path='PATH_INFO'
     ... )
 
     >>> help(with_path)
-    Help on function with_path:
+    Help on function with_path in module __main__:
     with_path(func)
         Add a `path` arg for ``PATH_INFO``
 
