@@ -48,7 +48,7 @@ and ``lighten()``.
 The ``@lite`` decorator says, "this function is a WSGI application, but it
 expects to be called with an `environ` dictionary, and return a (`status`,
 `headers`, `body`) triplet.  And it doesn't use ``start_response()``,
-``write()``, or expect to have a ``close()`` method called.
+``write()``, or expect to have a ``close()`` method called."
 
 The ``@lite`` decorator then wraps the function in such a way that if it's
 called by a WSGI 1 server or middleware, it will act like a WSGI 1 application.
@@ -93,7 +93,7 @@ Now, if you *are* yielding body chunks from your WSGI apps, you might
 want to consider *just not doing that*.
 
 That's because, if you don't yield chunks, you can write normal, synchronous
-code and won't have any of the problems I'm about to introduce you to...
+code that won't have any of the problems I'm about to introduce you to...
 problems that your *existing WSGI apps already have*, but you probably don't
 know about yet!
 
@@ -207,8 +207,9 @@ and then closes all the resources (or generators) when the request is finished.
 
 Objects are closed in the order in which they're registered, so that inner
 apps' resources are released prior to middleware resources being released.
-(That is, so that if an app is using a resource that was obtained via
-middleware, the resource will still be usable during the app's finalization.)
+(In other words, if an app is using a resource that it received from middleware
+via its `environ`, that resource will still be usable during the app's
+``close()`` processing or ``finally`` blocks.)
 
 Objects registered with this extension **must** have ``close()`` methods, and
 the methods **must** be idempotent: that is, it must be safe to call them
@@ -223,20 +224,17 @@ I would like to encourage WSGI server developers to support this extension if
 they can.  While WSGI Lite implements it via middleware (in both the ``@lite``
 and ``lighten()`` decorators), it's best if the WSGI origin server does it,
 in order to bypass any broken middleware in between the server and the app.
-
 (And, if a ``@lite`` or ``lighten()`` app is invoked from a server or
 middleware that already implements this extension, it'll make use of the
 provided implementation, instead of adding its own.)
 
 Now, if for some reason you want to use this extension directly in your code
-without using ``@with_closing``...  don't.  ;-)
-
-(Unless, of course, you *like* trying to remember a zillion details that must
-be gotten perfectly correct if you don't want the whole thing to be silently
-pointless.)
+without using ``@with_closing``...  don't.  ;-)  (Unless, of course, you *like*
+trying to remember a zillion details that must be gotten perfectly correct if
+you don't want the whole thing to be silently pointless.)
 
 Okay, maybe there's some reason you just *have* to use the extension directly
-instead of the decorator.  Here's what you need to remember:
+instead of the decorator.  Here's what you need to remember, though:
 
  * The WSGI spec allows called applications to modify the `environ`.  This
    means that you **must** retrieve the extension *before* you pass the
@@ -259,15 +257,15 @@ fetches the extension early, and calls it late.  And it not-so-subtly
 discourages you from trying to mess around with registering individual
 resources, which is really *really* hard to get right by doing it in a
 low-level fashion, even if you have the entire WSGI spec loaded into your
-brain's L1 cache!  ;-)
+brain's L1 cache.  ;-)
 
 
 Other Protocol Details
 ----------------------
 
 Technically, WSGI Lite is a protocol as well as an implementation.  And there's
-one other thing besides the Rack-style calling convention and ``register_close``
-extension that distinguishes it from standard WSGI.  
+still one more thing to cover (besides the Rack-style calling convention and
+``register_close`` extension) that distinguishes it from standard WSGI.  
 
 Applications supporting the "lite" invocation protocol (i.e. being called
 without a ``start_response`` and returning a status/header/body triplet), are
@@ -284,7 +282,7 @@ supports WSGI Lite, you can use the ``wsgi_lite.is_lite()`` and
 probably don't  *need* to, because if you call ``@lite`` or ``lighten()`` on
 an object that's already "lite", it's returned unchanged.  So it's easier to
 just always call the appropriate decorator, rather than trying to figure out
-*whether* to call it.)  
+*whether* to call it.  Idempotence == **good**!)  
 
 Anyway, the rest of the protocol is defined simply as a stripped down WSGI,
 minus ``start_response()``, ``write()``, and ``close()``, but with the addition
@@ -318,6 +316,18 @@ broken WSGI 1 middleware that lives *above* your application in the call stack!
 So, until standard WSGI servers support the ``wsgi_lite.register_close``
 extension, you can (and should) work around this by putting wrapping your
 outermost middleware with a ``lighten()`` call.
+
+Last, but not least, the ``lighten()`` wrapper doesn't support broken WSGI
+apps that call ``write()`` from inside their returned iterators.  While many
+servers allow it, the WSGI specification forbids it, and to support it in
+WSGI Lite would force *all* wrapped WSGI 1 apps to pay in the form of
+unnecessary greenlet context switches, even if they never used ``write()`` at
+all.
+
+Since the current "word on the street" says that very few WSGI apps use
+``write()`` at all, I figure it's okay to blow up on the even smaller number
+that are also spec violators, rather than burden *all* apps with extra overhead
+just to support the ill-behaved ones.
 
 
 Current Status
