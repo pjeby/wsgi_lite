@@ -334,12 +334,22 @@ Current Status
 --------------
 
 The code in this repository is experi-mental, and possibly very-mental or
-just plain detri-mental.  It is not tested in any serious way as yet: just some
-very basic "smoke tests".  I've thrown this out there for people to see and
-play with early.  Stuff may change, break, or this could all have been a really
-stupid idea that doesn't actually work.  You have been warned.
+just plain detri-mental.  It is not seriously tested or battle-hardened as yet:
+there are just some very basic acceptance tests and validation, enough to show
+a few basics working.  (See the "To-Test" list in ``tests.txt`` for what major
+tests are still needed.)
 
-(Oh, and it's under an ASF license, since that's what the PSF uses for
-contributions... i.e., I anticipate this potentially becoming PEPpable and
-stdlib-able in the future, if we don't find some sort of glaring hole in it.)
+So, I've really just thrown this out there for people to see and play with
+early.  Stuff may change, break, or this could all have been a really stupid
+idea that doesn't actually work.  Don't throw this into production or even
+serious development just yet: it might *look* like it works, but you'd be wiser
+to wait until there's something more like full test coverage.  But if you're
+just experimenting with it to see how it works or whether you like it, go for
+it!  (And if you have any feedback, I'd love to hear from you...  preferably
+via the Web-SIG mailing list.)
+
+Oh, and last, but not least...  this package is under the Apache license, since
+that's what the PSF uses for software contributed to Python, and I hope to see
+this protocol in a PEP and perhaps the stdlib in the future.  (Assuming we
+don't find some sort of glaring hole in the protocol or concept, of course.)
 
