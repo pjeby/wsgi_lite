@@ -60,7 +60,7 @@ So that the lightened function can support being called with the single-
 argument protocol, as well as standard WSGI::
 
     >>> to_close = []
-    >>> empty_env = {'wsgi_lite.register_close': to_close.append}
+    >>> empty_env = {'wsgi_lite.closing': to_close.append}
 
     >>> lighten(hello_world)(empty_env)
     ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
@@ -233,7 +233,7 @@ lighten():
   * write() tests (greenlets required for most):
     * Raise error if greenlets disabled and write() called
     * Multiple write() in main request, non-empty iterator w/close()
-  * register_closer extension available in app's environ
+  * closing extension available in app's environ
 
 Closing in general:
   * registered closables are closed by standard WSGI close() at outermost

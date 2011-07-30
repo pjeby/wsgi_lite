@@ -156,7 +156,7 @@ with_closing = bind('with_closing',
             
     NOTE: this decorator *must* come *after* ``@lite`` in the decorator list!
     """,
-    closing = 'wsgi_lite.register_close'
+    closing = 'wsgi_lite.closing'
 )
 
 
@@ -184,7 +184,7 @@ def lighten(app):
             headerinfo[:] = status, headers
             return write
 
-        register = environ['wsgi_lite.register_close']
+        register = environ['wsgi_lite.closing']
         result = _with_write_support(app, environ, start_response)
         if not headerinfo:
             for data in result:
@@ -292,16 +292,16 @@ def wrap_response(result, first=None, close=None):
 
 
 def get_closer(environ, chain=None):
-    """Add a ``wsgi_lite.register_close`` key and return a callback or None"""
+    """Add a ``wsgi_lite.closing`` key and return a callback or None"""
 
-    if 'wsgi_lite.register_close' not in environ:
+    if 'wsgi_lite.closing' not in environ:
 
         cleanups = []
         def closing(item):
             cleanups.append(item)
             return item
 
-        environ['wsgi_lite.register_close'] = closing
+        environ['wsgi_lite.closing'] = closing
 
         def close():
             while cleanups:

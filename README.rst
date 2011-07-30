@@ -113,7 +113,7 @@ it *much* easier to do things the right way::
             # ...  etc.
 
 The ``@bind`` decorator takes keyword arguments whose argument names match
-argument names on the decorated function, and automatically extracts the
+argument names on the decorated function.  It then automatically extracts the
 matching keys from the `environ`, passing them on as keyword arguments to the
 decorated function.  This automatically ensures that you aren't using
 possibly-corrupted keys from your child app(s), *and* lets you specify default
@@ -124,8 +124,8 @@ the function returned by ``@lite`` doesn't accept any keyword arguments. (Also,
 ``@bind`` checks your function's signature to make sure it has arguments with
 names matching the ones you gave to ``@bind``!)
 
-As a convenience for frequently used extensions or keys, you can save ``bind``
-calls and give them names, for example::
+As a convenience for frequently used extensions or keys, you can save
+``bind()`` calls and give them names, for example::
 
     >>> with_routing = bind(routing='wsgiorg.routing_args')
 
@@ -160,8 +160,9 @@ of course.)
 
 Sometimes, an extension may be known under more than one name - for example,
 an ``x-wsgiorg.`` extension vs. a ``wsgiorg.`` one, or a similar extension
-provided by different servers.  You could of course bind them to different
-arguments, but it's generally simpler to just bind to a tuple::
+provided by different servers.  You could of course map them to different
+arguments, but it's generally simpler to just map a single argument, using
+a tuple::
 
     >>> @bind(routing=('wsgiorg.routing_args', 'x-wsgiorg.routing_args'))
     ... def middleware(envrion, routing=((),{})):
@@ -171,9 +172,10 @@ This will check the environment for the named extensions in the order listed,
 and replace `routing` with the first one matched.
 
 For more elaborate use cases, you can also pass callables to ``bind``.  They'll
-be called with the environ, and must return an iterable with zero or more
-items.  Zero items means the lookup failed, and the default should be used.
-Otherwise, the first item is used as the keyword argument.  Example::
+be called with the `environ`, and must return an iterable with zero or more
+items.  Returning an empty sequence or yielding zero items means the lookup
+failed, and a default value should be used instead.  Otherwise, the first item
+is used as the keyword argument.  Example::
 
     >>> class MyRequest(object):
     ...     def __init__(self, environ):
@@ -217,14 +219,14 @@ parameters to temporary files that will be automatically closed when the
 request is finished::
 
     >>> def mktemp(environ):
-    ...     closing = environ['wsgi_lite.register_close']
+    ...     closing = environ['wsgi_lite.closing']
     ...     yield closing(tempfile(etc[...]))
 
     >>> @bind(tmp1=mktemp, tmp2=mktemp)
     ... def do_something(environ, tmp1, tmp2):
     ...     """Write stuff to tmp1 and tmp2"""
 
-What's ``wsgi_lite.register_close``, you ask?  Well, that's something we're
+What's ``wsgi_lite.closing``, you ask?  Well, that's something we're
 going to talk about in the next two sections.
 
 
@@ -275,7 +277,7 @@ the ``@wsgi_lite.with_closing`` decorator, e.g::
         return status, headers, closing(my_body())
 
 Under the hood, the ``@with_closing`` decorator is actually an abbreviation for
-``@bind(closing='wsgi_lite.register_close')``.  That is, it helps you use WSGI
+``@bind(closing='wsgi_lite.closing')``.  That is, it helps you use WSGI
 Lite's resource cleanup extension to the WSGI protocol.
 
 The protocol extension (accessed as ``closing()`` in the function body above)
@@ -372,10 +374,10 @@ though, we'll put the extension into a PEP soon and all the popular servers
 will provide it in a reasonable time period.)
 
 
-The ``wsgi_lite.register_close`` Extension
-------------------------------------------
+The ``wsgi_lite.closing`` Extension
+-----------------------------------
 
-WSGI Lite uses a WSGI server extension called ``wsgi_lite.register_close``,
+WSGI Lite uses a WSGI server extension called ``wsgi_lite.closing``,
 that lives in the application's `environ` variable.  The ``@lite`` and
 ``lighten()`` decorators automatically add this extension to the environment,
 if they're called from a WSGI 1 server or middleware, and the key doesn't
@@ -434,7 +436,7 @@ Other Protocol Details
 
 Technically, WSGI Lite is a protocol as well as an implementation.  And there's
 still one more thing to cover (besides the Rack-style calling convention and
-``register_close`` extension) that distinguishes it from standard WSGI.  
+``closing`` extension) that distinguishes it from standard WSGI.  
 
 Applications supporting the "lite" invocation protocol (i.e. being called
 without a ``start_response`` and returning a status/header/body triplet), are
@@ -455,7 +457,7 @@ just always call the appropriate decorator, rather than trying to figure out
 
 Anyway, the rest of the protocol is defined simply as a stripped down WSGI,
 minus ``start_response()``, ``write()``, and ``close()``, but with the addition
-of the ``wsgi_lite.register_close`` key.  That's pretty much it.
+of the ``wsgi_lite.closing`` key.  That's pretty much it.
 
 
 Limitations
@@ -482,7 +484,7 @@ Second, no, third...  wait, I'll come in again.
 *Chief* amongst the limitations of WSGI Lite is that it cannot work around
 broken WSGI 1 middleware that lives *above* your application in the call stack!
 
-So, until standard WSGI servers support the ``wsgi_lite.register_close``
+So, until standard WSGI servers support the ``wsgi_lite.closing``
 extension, you can (and should) work around this by wrapping your outermost
 middleware with a ``lighten()`` call.
 
