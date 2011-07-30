@@ -3,15 +3,6 @@ __all__ = [
 ]
 
 try:
-    from functools import update_wrapper
-except ImportError:
-    update_wrapper = None
-    try:
-        from peak.util.decorators import rewrap
-    except ImportError:
-        rewrap = None
-
-try:
     from greenlet import greenlet
 except ImportError:
     greenlet = None
@@ -30,13 +21,18 @@ def is_lite(app):
 def _iter_greenlet(g=None):
     while g: yield g.switch()
 
-function = type(lambda:None)
+from new import function
+def renamed(f, name):
+    return function(
+        f.func_code, f.func_globals, name, f.func_defaults, f.func_closure
+    )
+    
 def maybe_rewrap(app, wrapper):
     if isinstance(app, function):
-        if update_wrapper is not None:
-            return update_wrapper(wrapper, app)
-        elif rewrap is not None:
-            return rewrap(app, wrapper)
+        wrapper = renamed(wrapper, app.func_name)
+        wrapper.__module__ = app.__module__
+        wrapper.__doc__    = app.__doc__
+        wrapper.__dict__.update(app.__dict__)
     return wrapper
 
 class WSGIViolation(AssertionError):
@@ -76,6 +72,10 @@ def with_closing(app):
             register(b)
         return s, h, b
     return maybe_rewrap(app, wrapper)
+
+
+
+
 
 
 

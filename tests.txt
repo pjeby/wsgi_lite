@@ -50,7 +50,7 @@ are available)::
 But the second argument is always optional::
 
     >>> help(lighten(hello_world))
-    Help on function hello_world:
+    Help on function hello_world...:
     <BLANKLINE>
     hello_world(environ, start_response=None)
         Standard WSGI version of hello_world
@@ -98,7 +98,7 @@ But if wrapped with ``@lite``, is still usable in a standard WSGI server::
 Because in this case, the wrapper *adds* an optional start_response parameter::
 
     >>> help(lite(hello_lite))
-    Help on function hello_lite:
+    Help on function hello_lite...:
     <BLANKLINE>
     hello_lite(environ, start_response=None)
         'lite' version of hello_world
