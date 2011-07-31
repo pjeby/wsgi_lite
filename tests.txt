@@ -94,7 +94,15 @@ are available)::
         Standard WSGI version of hello_world
     <BLANKLINE>
 
-But the second argument is always optional::
+And wrapping is idempotent, so lightening an already-lightened function returns
+the same (wrapped) function::
+
+    >>> hw = lighten(hello_world)
+    >>> lighten(hw) is hw
+    True
+
+But the second argument of the wrapped function is always optional (despite
+being required by the original)::
 
     >>> help(lighten(hello_world))
     Help on function hello_world...:
@@ -131,12 +139,40 @@ But it is registered, if it does have one::
     >>> to_close
     [<StringIO.StringIO ...>]
 
-Wrapping is idempotent, so lightening an already-lightened function returns
-the same function::
+And a ``wsgi_lite.closing`` extension is provided for the benefit of any child
+applications::
 
-    >>> hw = lighten(hello_world)
-    >>> lighten(hw) is hw
-    True
+    >>> class closable:
+    ...     def close(self):
+    ...         print "Help, I'm being closed!"
+
+    >>> def check_for_closing_extension(environ, start_response):
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     yield "Hello, world!"
+    ...     if 'wsgi_lite.closing' in environ:
+    ...         yield "\nClosing extension found"
+    ...         c = closable()
+    ...         closing = environ['wsgi_lite.closing']
+    ...         if c is closing(c):
+    ...             yield "\nclosing(x) returns x"
+
+    >>> test(lighten(check_for_closing_extension))
+    Help, I'm being closed!
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello, world!
+    Closing extension found
+    closing(x) returns x
+
+Whereas calling the same function without ``lighten()`` doesn't end up with a
+closing extension::
+
+    >>> test(check_for_closing_extension)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello, world!
 
 
 ``@lite``
@@ -527,13 +563,9 @@ To-Test
 ``@lite``:
   * keyword arg/func-as-name checking
   
-lighten():
-  * Closing extension available in app's environ
-
 Closing in general:
   * registered closables are closed by standard WSGI close() at outermost
     "lite"-supporting decorator/middleware
-  * registered item is returned
   * Correct closing order
 
 Response Wrapping:
