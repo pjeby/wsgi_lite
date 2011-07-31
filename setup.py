@@ -1,9 +1,13 @@
 #!/usr/bin/env python
 """Distutils setup file"""
 
-import ez_setup
-ez_setup.use_setuptools()
-from setuptools import setup
+try:
+    from setuptools import setup
+except ImportError:
+    import ez_setup
+    ez_setup.use_setuptools()
+    from setuptools import setup
+
 
 # Metadata
 PACKAGE_NAME = "wsgi_lite"
@@ -27,10 +31,6 @@ def get_description():
         lines.append(line)
     f.close()
     return ''.join(lines)
-
-
-
-
 
 
 
