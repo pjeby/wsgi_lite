@@ -27,6 +27,49 @@ As you can see, it runs regular WSGI apps normally.  Now let's try some
     >>> from wsgi_lite import lite, lighten
 
 
+Greenlet Support
+----------------
+
+Greenlet support for ``write()`` calls can be explicitly disabled, even if the
+greenlet module is present, using the ``wsgi_lite.use_greenlets`` flag::
+
+    >>> import wsgi_lite
+    >>> wsgi_lite.use_greenlets
+    True
+
+The flag defaults to true, but greenlets still won't be used if the greenlet
+module isn't present.  Disabling greenlets *may* give a *miniscule* performance
+boost for WSGI 1 apps that do a lot of yielding and are wrapped by WSGI Lite
+middleware, but a better reason for disabling it would be if, say, you have
+a buggy greenlet implementation installed.
+
+In any case, disabling it will cause lighten()-ed WSGI 1 apps that use write()
+to fail::
+
+    >>> wsgi_lite.use_greenlets = False
+
+    >>> def basic_write(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello world!')
+    ...     return []
+
+    >>> test(lite(lambda env: lighten(basic_write)(env)), _debug=False)
+    Status: 500 Dude, this is whack!
+    Content-Type: text/plain
+    Content-Length: 59
+    <BLANKLINE>
+    A server error occurred.  Please contact the administrator.
+    --- Log Output ---
+    Traceback (most recent call last):
+      ...
+    NotImplementedError: Greenlets are disabled or missing
+    <BLANKLINE>
+
+The rest of the tests in this file will be run with greenlet use disabled; for
+the tests that fully exercise the write() functionality, see
+greenlet-tests.txt.
+
+
 ``lighten()``
 -------------
 
@@ -69,6 +112,24 @@ argument protocol, as well as standard WSGI::
     >>> lighten(hello_world)(empty_env)
     ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
 
+If a returned body iterator doesn't have a ``close()`` method, it's not
+registered with the "closing" extension::
+
+    >>> to_close
+    []
+
+But it is registered, if it does have one::
+
+    >>> def hello_from_file(environ, start_response):
+    ...     from StringIO import StringIO
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     return StringIO('Hello world!')
+
+    >>> lighten(hello_from_file)(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], <StringIO.StringIO ...>)
+
+    >>> to_close
+    [<StringIO.StringIO ...>]
 
 Wrapping is idempotent, so lightening an already-lightened function returns
 the same function::
@@ -171,7 +232,7 @@ Then, wrapping a ``@lite`` application (called via WSGI or WSGI Lite)::
     elloHay orldway!
 
     >>> s, h, b = latinator(lite(hello_lite))(empty_env)
-    >>> s, h, [''.join(b)]
+    >>> s, h, list(b)
     ('200 OK', [('Content-type', 'text/plain')], ['elloHay orldway!'])
 
 And a ``lighten()``-ed one::
@@ -183,7 +244,7 @@ And a ``lighten()``-ed one::
     elloHay orldway!
 
     >>> s, h, b = latinator(lighten(hello_world))(empty_env)
-    >>> s, h, [''.join(b)]
+    >>> s, h, list(b)
     ('200 OK', [('Content-type', 'text/plain')], ['elloHay orldway!'])
 
 
@@ -213,6 +274,101 @@ Just to be sure, though, let's check our WSGI compliance out a bit::
     Content-type: text/plain
     <BLANKLINE>
     elloHay orldway!
+
+
+WSGI Torture Tests
+------------------
+
+Here, we'll be verifying correct performance in various WSGI edge cases and
+protocol violations, as they're converted to the lite protocol.  This is a
+helper function so we can ``lighten()`` an app, and see what the resulting
+body output is::
+
+    >>> def test_lite(func):
+    ...     s, h, b = lighten(func)(empty_env)
+    ...     return s, h, list(b)
+
+It's legal for a WSGI app to yield some empty strings before it sets headers::
+
+    >>> def yield_before_headers(env, sr):
+    ...     yield ''
+    ...     yield ''
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    
+    >>> test_lite(yield_before_headers)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+But it's illegal for it to yield non-empty strings first::
+
+    >>> def late_starter(env, sr):
+    ...     yield ''
+    ...     yield 'Hello world!'
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    
+    >>> test_lite(late_starter)
+    Traceback (most recent call last):
+      ...
+    WSGIViolation: Data yielded without start_response
+
+And it's legal to change your mind about the headers, as long as you haven't
+output any data yet::
+
+    >>> def changed_headers(env, sr):
+    ...     sr('200 OK', [('Content-type', 'text/xml')])
+    ...     yield ''
+    ...     sr('200 OK', [('Content-type', 'text/html')])
+    ...     yield ''
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    
+    >>> test_lite(changed_headers)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+But it's *not* legal to change them once the data is yielded::
+
+    >>> def replaced_headers(env, sr):
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    ...     sr('200 OK', [('Content-type', 'text/html')])
+    
+    >>> test_lite(replaced_headers)
+    Traceback (most recent call last):
+      ...
+    WSGIViolation: Headers already sent & no exc_info given
+
+Unless you pass in an exception triplet, in which case it's raised::
+
+    >>> def replaced_headers_with_error(env, sr):
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    ...     exc_info = NameError, NameError('foo'), None
+    ...     sr('200 OK', [('Content-type', 'text/html')], exc_info)
+
+    >>> test_lite(replaced_headers_with_error)
+    Traceback (most recent call last):
+      ...
+    NameError: foo
+
+But it's *not* raised if you pass it in at a point when non-empty data hasn't
+been yielded yet::
+
+    >>> def early_headers_with_error(env, sr):
+    ...     yield ''
+    ...     exc_info = NameError, NameError('foo'), None
+    ...     sr('200 OK', [('Content-type', 'text/html')], exc_info)
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+
+    >>> test_lite(early_headers_with_error)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+
+    
+
+
+
+
 
 Argument Bindings
 =================
@@ -372,23 +528,13 @@ To-Test
   * keyword arg/func-as-name checking
   
 lighten():
-  * Empty items yielded before start_response should still work
-  * (App whose body is a generator, too)
-  * write() tests (greenlets required for most):
-    * Raise error if greenlets disabled and write() called
-    * Multiple write() in main request, non-empty iterator w/close()
-  * closing extension available in app's environ
+  * Closing extension available in app's environ
 
 Closing in general:
   * registered closables are closed by standard WSGI close() at outermost
     "lite"-supporting decorator/middleware
   * registered item is returned
-  * @with_closing binds it
   * Correct closing order
-
-Middleware and WSGI compliance:
-  * Multi-set of headers w/out exc_info raises error
-  * Non-empty pre-start yield raises error
 
 Response Wrapping:
  * close() only happens once

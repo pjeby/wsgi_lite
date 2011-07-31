@@ -148,10 +148,6 @@ Multi-Write
 Mixed write() and iteration
 ===========================
 
-
-Calling write() during iteration
---------------------------------
-
 It's a spec violation  to call write() from your body iterator, even though
 most servers don't care::
 
@@ -180,5 +176,17 @@ most servers don't care::
                    their return iterable - see PEP 333/3333
     <BLANKLINE>
 
+You can however, return an iterator from your body, even if you use write()::
+
+    >>> def mixed_writer(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello ')
+    ...     return ['world!']
+
+    >>> test(dilute(mixed_writer))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
 
 

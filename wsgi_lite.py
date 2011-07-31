@@ -4,10 +4,10 @@ __all__ = [
 
 try:
     from greenlet import greenlet
-except ImportError:
+except ImportError: # pragma: no cover
     greenlet = None
 
-use_greenlets = greenlet is not None
+use_greenlets = True
     
 def mark_lite(app):
     """Mark `app` as supporting WSGI Lite, and return it"""
@@ -85,40 +85,40 @@ def lighten(app):
     if is_lite(app):
         # Don't wrap something that supports wsgi_lite already
         return app
-
     def wrapper(environ, start_response=None):
         if start_response is not None:
             # Called from Standard WSGI - we're just passing through
             close = get_closer(environ)  # enable extension before we go
             return wrap_response(app(environ, start_response), close=close)
-
         headerinfo = []
+        data = None
         def write(data):
             raise NotImplementedError("Greenlets are disabled or missing")
-
         def start_response(status, headers, exc_info=None):
-            if headerinfo and not exc_info:
-                raise WSGIViolation("Headers already set & no exc_info given")
+            if exc_info:
+                try:
+                    if data: raise exc_info[0], exc_info[1], exc_info[2]
+                finally:
+                    exc_info = None        # avoid dangling circular ref
+            elif headerinfo and data:
+                raise WSGIViolation("Headers already sent & no exc_info given")
             headerinfo[:] = status, headers
             return write
-
-        register = environ['wsgi_lite.closing']
+        closing = environ['wsgi_lite.closing']
         result = _with_write_support(app, environ, start_response)
         if not headerinfo:
             for data in result:
                 if not data and not headerinfo:
                     continue
                 elif not headerinfo:
-                    raise WSGIViolation("Data yielded w/o start_response")
+                    raise WSGIViolation("Data yielded without start_response")
                 elif data:
                     result = ResponseWrapper(result, data)
                     break
         if hasattr(result, 'close'):
-            register(result)
-
+            closing(result)
         headerinfo.append(result)
         return tuple(headerinfo)
-
     return mark_lite(maybe_rewrap(app, wrapper))
 
 def _with_write_support(app, environ, _start_response):
@@ -156,7 +156,7 @@ def _with_write_support(app, environ, _start_response):
             return response     
         else:
             for data in response:
-                write(data)
+                greenlet.getcurrent().parent.switch(data)
 
     # save in result so write() knows it 
     result = greenlet(wrap).switch()    
