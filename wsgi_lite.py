@@ -1,6 +1,5 @@
 __all__ = [
-    'lite', 'lighten', 'bind', 'with_closing', 'is_lite', 'mark_lite',
-    'WSGIViolation',
+    'lite', 'lighten', 'is_lite', 'mark_lite', 'WSGIViolation',
 ]
 
 try:
@@ -38,6 +37,7 @@ def maybe_rewrap(app, wrapper):
         wrapper.__doc__    = app.__doc__
         wrapper.__dict__.update(app.__dict__)
     return wrapper
+
 
 def iter_bindings(rule, environ):
     """Yield possible matches of binding rule `rule` against `environ`
@@ -125,9 +125,21 @@ class WSGIViolation(AssertionError):
     """A WSGI protocol violation has occurred"""
 
 
-def lite(app):
+def lite(__name__=None, __doc__=None, __module__=None, **kw):
     """Wrap a WSGI Lite app for possible use in a plain WSGI server"""
-
+    isfunc = isinstance(__name__, function)
+    if kw:
+        if isfunc:
+            return lite(bind(**kw)(__name__))
+        else:
+            return bind(__name__, __doc__, __module__, **kw)
+    app = __name__
+    if not isfunc:
+        raise TypeError("Not a function: %r" % (app,))
+    elif __doc__ is not None or __module__ is not None:
+        raise TypeError(
+            "Usage: @lite or @lite(**kw) or lite(name,doc,module,**kw)"
+        )
     if is_lite(app):
         # Don't wrap something that supports wsgi_lite already
         return app
@@ -146,18 +158,6 @@ def lite(app):
     return mark_lite(maybe_rewrap(app, wrapper))
 
 
-with_closing = bind('with_closing', 
-    """Provide ``closing()`` API for ensuring ``close()`` methods are called::
-    
-        @lite
-        @with_closing   # <- must be *after* lite in the list
-        def my_app(environ, closing):     # <- arg must be named closing
-            return status, header, closing(body)
-            
-    NOTE: this decorator *must* come *after* ``@lite`` in the decorator list!
-    """,
-    closing = 'wsgi_lite.closing'
-)
 
 
 

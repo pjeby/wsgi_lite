@@ -6,7 +6,7 @@ Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
 
 ::
 
-    from wsgi_lite import lite, lighten
+    >>> from wsgi_lite import lite, lighten
     
     def latinator(app):
         @lite
@@ -100,44 +100,38 @@ like ``wsgi.file_wrapper`` or ``wsgiorg.routing_args``, it might end up
 reading the child application's extensions, rather than those intended for the
 middleware itself.
 
-To help handle these cases, WSGI Lite includes a ``@bind`` decorator that makes
-it *much* easier to do things the right way::
+To help handle these cases, the ``@lite`` decorator can bind a function's
+keyword arguments to values based on the contents of the `environ` argument::
 
-    >>> from wsgi_lite import lite, bind
-    
-    @lite
-    @bind(path='PATH_INFO', routing='wsgiorg.routing_args')
+    @lite(path='PATH_INFO', routing='wsgiorg.routing_args')
     def middleware(environ, path='', routing=((),{})):
         response = some_app(environ, start_response)
         if path.endswith('foo'):
             # ...  etc.
 
-The ``@bind`` decorator takes keyword arguments whose argument names match
-argument names on the decorated function.  It then automatically extracts the
-matching keys from the `environ`, passing them on as keyword arguments to the
-decorated function.  This automatically ensures that you aren't using
-possibly-corrupted keys from your child app(s), *and* lets you specify default
-values (via your function's defaults).
-
-Note that ``@bind`` must always come **after** the ``@lite`` decorator, because
-the function returned by ``@lite`` doesn't accept any keyword arguments. (Also,
-``@bind`` checks your function's signature to make sure it has arguments with
-names matching the ones you gave to ``@bind``!)
+When ``@lite`` is called with keyword arguments whose argument names match
+argument names on the decorated function, it wraps the function in such a way
+that the matching keys from the `environ` are passed in as keyword arguments.
+This automatically ensures that you aren't using possibly-corrupted keys from
+your child app(s), *and* lets you specify default values (via your function's
+argument defaults, as shown above).
 
 As a convenience for frequently used extensions or keys, you can save
-``bind()`` calls and give them names, for example::
+calls to ``lite()`` and give them names, for example::
 
-    >>> with_routing = bind(routing='wsgiorg.routing_args')
+    >>> with_routing = lite(routing='wsgiorg.routing_args')
 
-    >>> @lite
-    ... @with_routing
+And the resulting decorator is precisely equivalent to invoking ``@lite()``
+directly::
+    
+    >>> @with_routing
     ... def middleware(envrion, routing=((),{})):
     ...     """Some sort of middleware"""
 
-And you can even stack them, or give them names, docstrings, and specify what
-module you defined them in::
+You can even stack multiple ``@lite()`` calls (direct or saved), or give them
+names, docstrings, and specify what module you defined them in::
 
-    >>> with_path = bind(
+    >>> with_path = lite(
     ...     'with_path', "Add a `path` arg for ``PATH_INFO``", "__main__",
     ...     path='PATH_INFO'
     ... )
@@ -147,35 +141,42 @@ module you defined them in::
     with_path(func)
         Add a `path` arg for ``PATH_INFO``
 
-    >>> @lite
-    ... @with_routing
+    >>> @with_routing
     ... @with_path
     ... def middleware(environ, path='', routing=((),{})):
     ...     """Some combined middleware"""
 
-The underlying ``@bind`` decorator is smart enough to tell when it's being
-stacked, and combines decorators so there's only one used, no matter how many
-of them you stack.  (As long as they're not intermingled with other decorators,
-of course.)
+By the way, the underlying decorator is smart enough to tell when it's being
+stacked, and automatically merges the wrappings so there's only one level
+of calling overhead added, no matter how many of them you stack.  (As long as
+they're not intermingled with other decorators, of course!)
 
 Sometimes, an extension may be known under more than one name - for example,
 an ``x-wsgiorg.`` extension vs. a ``wsgiorg.`` one, or a similar extension
-provided by different servers.  You could of course map them to different
-arguments, but it's generally simpler to just map a single argument, using
+provided by different servers.  You could of course bind them to different
+arguments, but it's generally simpler to just bind a single argument, using
 a tuple::
 
-    >>> @bind(routing=('wsgiorg.routing_args', 'x-wsgiorg.routing_args'))
+    >>> @lite(routing=('wsgiorg.routing_args', 'x-wsgiorg.routing_args'))
     ... def middleware(envrion, routing=((),{})):
     ...     """Some sort of middleware"""
 
 This will check the environment for the named extensions in the order listed,
 and replace `routing` with the first one matched.
 
-For more elaborate use cases, you can also pass callables to ``bind``.  They'll
-be called with the `environ`, and must return an iterable with zero or more
-items.  Returning an empty sequence or yielding zero items means the lookup
-failed, and a default value should be used instead.  Otherwise, the first item
-is used as the keyword argument.  Example::
+These argument specifications are called "bindings", by the way.  A binding is
+either a string (i.e. an instance of ``basestring``), a callable object, or an
+iterable of bindings (recursively).  Strings are looked up in the environ, and
+iterables are tried in sequence until a lookup succeeds.
+
+Callable bindings, on the other hand, are looked up by being called with a
+single positional argument: the `environ` dictionary.  They must return an
+iterable (or sequence) yielding zero or more items.  Returning an empty
+sequence or yielding zero items means the lookup failed, and a default value
+should be used instead (or the next alternative binding provided for that
+keyword argument).  Otherwise, the first item yielded is passed in as the
+matching keyword argument.  Here's an example of using a classmethod as a
+callable binding::
 
     >>> class MyRequest(object):
     ...     def __init__(self, environ):
@@ -185,14 +186,14 @@ is used as the keyword argument.  Example::
     ...     def bind(cls, environ):
     ...         yield cls(environ)
 
-    >>> with_request = bind(request=MyRequest.bind)
+    >>> with_request = lite(request=MyRequest.bind)
 
 Now, ``@with_request`` will create a ``MyRequest`` instance wrapping the
 `environ` of the decorated function, and provide it via the ``request`` keyword
 argument.
 
-This can also be used to do things like accessing environment-cached objects,
-such as sessions::
+The same approach can also be used to do things like accessing
+environment-cached objects, such as sessions::
 
     >>> class MySession(object):
     ...     def __init__(self, environ):
@@ -205,14 +206,14 @@ such as sessions::
     ...             session = environ['myframework.MySession'] = cls(environ)
     ...         yield session
 
-    >>> with_session = bind(session=MySession.bind)
+    >>> with_session = lite(session=MySession.bind)
 
 The possibilities are pretty much endless -- and much more in keeping with my
 original vision for how WSGI was supposed to help dissolve web frameworks into
 *web libraries*.  (That is, things you can easily mix and match without 
 every piece of code you use having to come from the same place.)
 
-Callables that you use with ``@bind`` don't even have to return something from
+Callables that you use as bindings don't even have to return something from
 the environment or wrap the environment, by the way - they can just be things
 that *use* something from the environment.  For example, you could bind
 parameters to temporary files that will be automatically closed when the
@@ -222,12 +223,13 @@ request is finished::
     ...     closing = environ['wsgi_lite.closing']
     ...     yield closing(tempfile(etc[...]))
 
-    >>> @bind(tmp1=mktemp, tmp2=mktemp)
+    >>> @lite(tmp1=mktemp, tmp2=mktemp)
     ... def do_something(environ, tmp1, tmp2):
     ...     """Write stuff to tmp1 and tmp2"""
 
-What's ``wsgi_lite.closing``, you ask?  Well, that's something we're
-going to talk about in the next two sections.
+Hey now...  where did that ``wsgi_lite.closing`` thing come from, and what
+does it do?  Well, that's what we're going to talk about in the next
+two sections...
 
 
 ``close()`` and Resource Cleanups
@@ -256,13 +258,10 @@ produce its output incrementally...  but the hard problem of proper resource
 cleanup when doing so, is one of the reasons I'm always saying it.)
 
 Anyway, if you *must* produce your response in chunks, *and* you need to
-release some resources as soon as the response is finished,  you need to use
-the ``@wsgi_lite.with_closing`` decorator, e.g::
+release some resources as soon as the response is finished, you need to use
+the ``wsgi_lite.closing`` extension, e.g::
 
-    from wsgi_lite import lite, with_closing
-
-    @lite
-    @with_closing
+    @lite(closing='wsgi_lite.closing')
     def my_app(environ, closing):
 
         def my_body():
@@ -276,11 +275,7 @@ the ``@wsgi_lite.with_closing`` decorator, e.g::
 
         return status, headers, closing(my_body())
 
-Under the hood, the ``@with_closing`` decorator is actually an abbreviation for
-``@bind(closing='wsgi_lite.closing')``.  That is, it helps you use WSGI
-Lite's resource cleanup extension to the WSGI protocol.
-
-The protocol extension (accessed as ``closing()`` in the function body above)
+This protocol extension (accessed as ``closing()`` in the function body above)
 is used to register an iterator (or other resource) so that its ``close()``
 method will be called at the end of the request, even if the browser
 disconnects or a piece of middleware throws away your iterator to use its own
@@ -296,8 +291,7 @@ So, if you are passing any resources down to another WSGI application, be
 sure to call ``closing()`` on them *before* calling the other application, and
 then *don't* close them in your body iterator.  Example::
 
-    @lite
-    @with_closing
+    @lite(closing='wsgi_lite.closing')
     def my_app(environ, closing):
         environ['some.key'] = closing(some_resource())
         return subapp(environ)
@@ -309,20 +303,20 @@ them.
 
 **Don't**, however, call ``closing()`` on objects that don't belong to your
 function.  If you didn't allocate it, closing it is somebody else's job.  In
-particular, you don't need to call ``closing()`` on any WSGI  or WSGI Lite
+particular, you don't need to call ``closing()`` on any WSGI or WSGI Lite
 response bodies, because ``lighten()`` takes care of that for you, and you'll
 end up double-closing things.
 
-Okay, so *that* was the bad news.  Not that bad, though, is it?  You need
-another decorator, you need to pay a little bit of attention to the order
-of resource closing, and you need to register your own objects (and *only*
-your objects) for closing.  That's it!
+Okay, so *that* was the bad news.  Not that bad, though, is it?  You just need
+to add an extra argument to ``@lite``, pay a little bit of attention to the
+order of resource closing, and register your own objects (but *only* your own
+objects) for closing.  That's it!
 
 Really, the rest of this section is all about what will happen if you *don't*
-use the decorator, or if you try to do resource cleanup in a standard WSGI app
+use the extension, or if you try to do resource cleanup in a standard WSGI app
 without the benefit of WSGI Lite.
 
-As long as you use the decorator, your app's resource cleanup will work *at
+As long as you use the extension, your app's resource cleanup will work *at
 least* as well as -- and probably much better than! -- it would work under
 plain WSGI.  (And you can make it work even better still if you wrap your
 entire WSGI stack with a ``lighten()`` call...  but more on that will have to
@@ -333,7 +327,7 @@ that exist in *standard* WSGI's resource management protocol, and what WSGI
 Lite is doing to work around them.
 
 What flaws and weaknesses?  Well, consider the example above.  Why does it
-*need* the ``@with_closing`` decorator?  After all, doesn't Python guarantee
+*need* the ``closing()`` extension?  After all, doesn't Python guarantee
 that the ``finally`` block will be executed anyway?
 
 Well, yes and no.  First off, if the generator is called but never iterated
@@ -365,8 +359,9 @@ So, WSGI Lite works around this by giving you a way to be *sure* that
 ``close()`` will be called, using a tiny extension of the WSGI protocol that
 I'll explain in the next section...  but only if you care about the details.
 
-Otherwise, just use ``@with_closing`` if you need resource cleanup in your
-body iterator, and be happy that you don't need to know anything more.  ;-)
+Otherwise, just use the ``wsgi_lite.closing`` extension if you need resource
+cleanup in your body iterator, and be happy that you don't need to know
+anything more.  ;-)
 
 Well, actually, you do need to know ONE more thing...  If your outermost
 ``@lite`` application is wrapped by any off-the-shelf WSGI middleware, you
@@ -389,9 +384,9 @@ that lives in the application's `environ` variable.  The ``@lite`` and
 ``lighten()`` decorators automatically add this extension to the environment,
 if they're called from a WSGI 1 server or middleware, and the key doesn't
 already exist.  (This is why you don't need a default value for the ``closing``
-argument when using ``@with_closing``, by the way: the key will always be
-available to a ``@lite`` app or middleware component, or any sub-app or
-sub-middleware that inherits the same environment.)
+argument, by the way: the key will always be available to a ``@lite`` app or
+middleware component, or any sub-app or sub-middleware that inherits the same
+environment.)
 
 The value for this key is a callback function that takes one argument: an
 object whose ``close()`` method is to be called at the end of the request.
@@ -432,10 +427,10 @@ middleware that already implements this extension, it'll make use of the
 provided implementation, instead of adding its own.)
 
 Now, if for some reason you want to use this extension directly in your code
-without using ``@with_closing``, *please* remember that the WSGI spec allows
-called applications to modify the `environ`.  This means that you **must**
-retrieve the extension *before* you pass the `environ` to another app.  (That's
-why we have ``@bind``, remember?)
+without using a ``@lite()`` binding, *please* remember that the WSGI spec
+allows called applications to modify the `environ`.  This means that you
+**must** retrieve the extension *before* you pass the `environ` to another app.
+(That's why we *have* keyword binding in ``@lite()``, remember?)
 
 
 Other Protocol Details
