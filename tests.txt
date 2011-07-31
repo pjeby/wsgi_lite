@@ -1,3 +1,7 @@
+The Lite Protocol
+=================
+
+
 Standard WSGI Apps
 ------------------
 
@@ -210,22 +214,162 @@ Just to be sure, though, let's check our WSGI compliance out a bit::
     <BLANKLINE>
     elloHay orldway!
 
+Argument Bindings
+=================
+
+In this section, we'll be testing the features provided by the
+``wsgi_bindings`` module::
+
+    >>> from wsgi_bindings import bind, with_bindings, iter_bindings
+
+
+``iter_bindings()``
+-------------------
+
+Used to implement the argument binding system, ``iter_bindings()`` yields
+possible matches for a binding rule applied to a dictionary (e.g., a WSGI
+environment)::
+
+    >>> list(iter_bindings('x', dict(x=1)))
+    [1]
+
+With an empty result indicating a failure to find a match::
+
+    >>> list(iter_bindings('x', dict(y=2)))
+    []
+
+Sequences of rules are applied sequentially, with all matches being yielded::
+
+    >>> list(iter_bindings(['x','y'], dict(y=2)))
+    [2]
+
+    >>> list(iter_bindings(['x','y'], dict(y=2, x=1)))
+    [1, 2]
+
+And this applies recursively::
+
+    >>> list(iter_bindings(['w', ['x','y'], 'z'], dict(y=2, x=1, w=0, z=3)))
+    [0, 1, 2, 3]
+
+Callables are invoked on the environment, and are expected to yield their own
+values in turn::
+
+    >>> def b(environ):
+    ...     for k in 'x', 'y', 'z':
+    ...         if k in environ:
+    ...             yield environ[k]
+
+    >>> list(iter_bindings(b, dict(y=2, x=1, w=0, z=3)))
+    [1, 2, 3]
+
+and of course, you can have include the callables in sequences, too::
+
+    >>> list(iter_bindings(['w', b, 'q'], dict(y=2, x=1, w=0, z=3)))
+    [0, 1, 2, 3]
+
+But an object *must* be a ``basestring``, a ``callable()``, or have an
+``__iter__`` method, in order to be considered a rule::
+
+    >>> list(iter_bindings(1, dict()))
+    Traceback (most recent call last):
+      ...
+    TypeError: binding rule 1 is not a tuple, callable, or string
+
+
+``with_bindings()``
+-------------------
+
+Given a dictionary mapping argument names to binding rules, ``with_bindings()``
+invokes a function with a given environment, adding keyword arguments for the
+first result yielded by ``iter_bindings()`` for the matching rule::
+
+    >>> with_bindings(dict(x='y'), (lambda env, x: x), dict(y=42))
+    42
+
+    >>> with_bindings(dict(x=['q', 'y']), (lambda env, x: x), dict(y=42))
+    42
+
+    >>> with_bindings(dict(x=['q', 'y']), (lambda env, x: x), dict(y=42, q=23))
+    23
+
+If a rule doesn't match, its keyword argument isn't added::
+
+    >>> with_bindings(dict(x='y'), (lambda env, x=99: x), dict(q=23))
+    99
+
+
+``@bind``
+---------
+
+It should be possible to save a binding and give it a name, docstring, and
+module::
+
+    >>> with_x_x = bind('with_x_x', "A docstring", "doctest", x='x')
+
+    >>> with_x_x.__name__
+    'with_x_x'
+    >>> with_x_x.__doc__
+    'A docstring'
+    >>> with_x_x.__module__
+    'doctest'
+
+With reasonable defaults if these items are omitted::
+
+    >>> help(bind(x='x'))
+    Help on function with_x...:
+    <BLANKLINE>
+    with_x(func)
+    <BLANKLINE>
+    
+Bindings can be applied to a function that has matching keyword argument
+names::
+
+    >>> bind(x='x')(lambda env, x: x)
+    <function <lambda> at ...>
+
+But it's an error if the function lacks a matching argument name::
+
+    >>> bind(x='x')(lambda env, y: y)
+    Traceback (most recent call last):
+      ...
+    TypeError: <function <lambda> at ...> has no 'x' argument
+
+
+Bindings can be stacked in any order, with the same result::
+
+    >>> def f(environ, x, y="z"):
+    ...     print (x, y)
+
+    >>> bind(y='z')(bind(x='x')(f))(dict(x=1, z=2))
+    (1, 2)
+
+    >>> bind(x='x')(bind(y='z')(f))(dict(x=1, z=2))
+    (1, 2)
+
+But you can't redefine a binding that's already defined in the same stack::
+
+    >>> bind(x='b')(bind(x='a')(f))
+    Traceback (most recent call last):
+      ...
+    TypeError: Rebound argument 'x' from 'a' to 'b'
+
+Unless it's redefined to an equal (==) value::
+
+    >>> bind(x='x')(bind(x='x')(f))(dict(x=1, z=2))
+    (1, 'z')
+
+    >>> bind(x=('a',))(bind(x=['a'])(f))
+    Traceback (most recent call last):
+      ...
+    TypeError: Rebound argument 'x' from ['a'] to ('a',)
+
+
 
 To-Test
--------
+=======
 
-``@bind``:
-  * names/docstrings
-  * stacking
+``@lite``:
   * keyword arg/func-as-name checking
-  * rebind checking
-  * argument name checking
-  * after-lite checking
-  * default args processing
-  * callables
-  * tuples
-  * unsupported rule errors
-    * changing child environ doesn't affect parent
   
 lighten():
   * Empty items yielded before start_response should still work

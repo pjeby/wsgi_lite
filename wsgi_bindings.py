@@ -24,20 +24,20 @@ def iter_bindings(rule, environ):
                 yield result
     else:
         raise TypeError(
-            "binding %r is not a tuple, callable, or string" % (v,)
+            "binding rule %r is not a tuple, callable, or string" % (rule,)
         )
 
 def with_bindings(bindings, app, environ):
     """Call app(environ, **computed_bindings)"""
     args = {}
-    for k, v in bindings.iteritems():
-        for argname, rule in kw.iteritems():
-            for value in iter_bindings(rule, environ):
-                args[argname] = value
-                break   # take only first matching value, if any            
+    for argname, rule in bindings.iteritems():
+        for value in iter_bindings(rule, environ):
+            args[argname] = value
+            break   # take only first matching value, if any            
     if args:
         return app(environ, **args)
     return app(environ)
+
 
 def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
     """Bind environ keys to keyword arguments on a lite-wrapped app"""
@@ -46,7 +46,7 @@ def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
         func = decorator(func)
         f, bindings = func.__wl_bind_info__
         for argname in bindings:
-            if argname in kw:
+            if argname in kw and bindings[argname] != kw[argname]:
                 raise TypeError(
                     "Rebound argument %r from %r to %r" %
                     (argname, bindings[argname], kw[argname])
