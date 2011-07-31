@@ -1,3 +1,5 @@
+__all__ = ['bind', 'with_bindings', 'iter_bindings']
+
 from wsgi_lite import maybe_rewrap, renamed, function
 
 def iter_bindings(rule, environ):
@@ -37,8 +39,6 @@ def with_bindings(bindings, app, environ):
         return app(environ, **args)
     return app(environ)
 
-
-
 def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
     """Bind environ keys to keyword arguments on a lite-wrapped app"""
 
@@ -56,7 +56,7 @@ def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
             argnames = f.func_code.co_varnames[:f.func_code.co_argcount]
             for argname in kw:
                 if argname not in argnames:
-                    raise TypeError("%r has no %r argument" % (app, argname))            
+                    raise TypeError("%r has no %r argument" % (f, argname))            
         return func
         
     decorate = renamed(decorate, __name__ or 'with_'+'_'.join(kw))
@@ -69,14 +69,14 @@ def make_bindable(func):
         bindings = {}
         def wrapper(environ):
             return with_bindings(bindings, func, environ)
+        wrapper = maybe_rewrap(func, wrapper)
         wrapper.__wl_bind_info__ = func, bindings
-        return maybe_rewrap(func, wrapper)
+        return wrapper
     return func
 
-
-
-
-
+def bind(__name__=None, __doc__=None, __module__=None, **kw):
+    """Bind environment-based values to function keyword arguments"""
+    return rebinder(make_bindable, __name__, __doc__, __module__, **kw)
 
 
 

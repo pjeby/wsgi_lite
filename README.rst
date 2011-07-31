@@ -227,9 +227,22 @@ request is finished::
     ... def do_something(environ, tmp1, tmp2):
     ...     """Write stuff to tmp1 and tmp2"""
 
-Hey now...  where did that ``wsgi_lite.closing`` thing come from, and what
-does it do?  Well, that's what we're going to talk about in the next
-two sections...
+You can even use argument bindings *in your binding functions*, using the
+``@bind`` decorator from the ``wsgi_bindings`` module::
+
+    >>> from wsgi_bindings import bind
+
+    >>> @bind(closing = 'wsgi_lite.closing')
+    ... def mktemp(environ, closing):
+    ...     yield closing(tempfile(etc[...]))
+    
+``@bind()`` is just like ``@lite()`` with keyword arguments (including the
+ability to save and stack calls), except that it doesn't turn the decorated
+function into a WSGI app.
+
+Now, given the above examples, you might be wondering what all that
+``wsgi_lite.closing`` stuff is about.  Well, that's what we're going to talk
+about in the next two sections...
 
 
 ``close()`` and Resource Cleanups

@@ -41,7 +41,6 @@ def maybe_rewrap(app, wrapper):
 
 def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
     """Wrap a WSGI Lite app for possible use in a plain WSGI server"""
-
     isfunc = isinstance(__name_or_func__, function)
     if isfunc and (__doc__ is not None or __module__ is not None):
         raise TypeError(
@@ -49,20 +48,21 @@ def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
         )
     if kw:
         if isfunc:
-            return rebinder(lite, **kw)(__name_or_func__)
+            return rebinder(_lite, **kw)(__name_or_func__)
         else:
-            return rebinder(lite, __name_or_func__, __doc__, __module__, **kw)
+            return rebinder(_lite, __name_or_func__, __doc__, __module__, **kw)
     elif not isfunc:
         raise TypeError("Not a function: %r" % (__name_or_func__,))
+    return _lite(__name_or_func__)
 
-    app = __name_or_func__
+def _lite(app):
+    """Provide a conversion wrapper (if needed) for WSGI 1 -> WSGI Lite"""
     if is_lite(app):
-        # Don't wrap something that supports wsgi_lite already
-        return app
+        return app  # Don't wrap something that supports wsgi_lite already
 
     bindings = {}
     def wrapper(environ, start_response=None):
-        if start_response is not None:
+        if start_response is not None:   # It's a WSGI 1 call...
             close = get_closer(environ)  # Support wsgi_lite.closing() callback
             if bindings:
                 s, h, b = with_bindings(bindings, app, environ)
@@ -70,8 +70,8 @@ def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
                 s, h, b = app(environ)
             start_response(s, h)
             return wrap_response(b, close=close)
-        # Called via lite, just pass through as-is
-        if bindings:
+        # Called via lite, just pass through as-is, w/optional bindings
+        elif bindings:
             return with_bindings(bindings, app, environ)       
         else:
             return app(environ)
