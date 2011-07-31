@@ -42,18 +42,15 @@ def maybe_rewrap(app, wrapper):
 def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
     """Wrap a WSGI Lite app for possible use in a plain WSGI server"""
     isfunc = isinstance(__name_or_func__, function)
-    if isfunc and (__doc__ is not None or __module__ is not None):
+
+    if isfunc and not kw and __doc__ is None and __module__ is None:
+        return _lite(__name_or_func__)
+    elif kw and not isfunc:
+        return rebinder(_lite, __name_or_func__, __doc__, __module__, **kw)
+    else:
         raise TypeError(
-            "Usage: @lite or @lite(**kw) or lite(name,doc,module,**kw)"
+            "Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)"
         )
-    if kw:
-        if isfunc:
-            return rebinder(_lite, **kw)(__name_or_func__)
-        else:
-            return rebinder(_lite, __name_or_func__, __doc__, __module__, **kw)
-    elif not isfunc:
-        raise TypeError("Not a function: %r" % (__name_or_func__,))
-    return _lite(__name_or_func__)
 
 def _lite(app):
     """Provide a conversion wrapper (if needed) for WSGI 1 -> WSGI Lite"""
@@ -62,7 +59,8 @@ def _lite(app):
 
     bindings = {}
     def wrapper(environ, start_response=None):
-        if start_response is not None:   # It's a WSGI 1 call...
+        # Is it a WSGI 1 call?
+        if start_response is not None:   
             close = get_closer(environ)  # Support wsgi_lite.closing() callback
             if bindings:
                 s, h, b = with_bindings(bindings, app, environ)
@@ -70,11 +68,13 @@ def _lite(app):
                 s, h, b = app(environ)
             start_response(s, h)
             return wrap_response(b, close=close)
-        # Called via lite, just pass through as-is, w/optional bindings
-        elif bindings:
-            return with_bindings(bindings, app, environ)       
+
+        # Called via lite, so just pass through as-is, w/optional bindings
         else:
-            return app(environ)
+            if bindings:
+                return with_bindings(bindings, app, environ)       
+            else:
+                return app(environ)
 
     wrapper = maybe_rewrap(app, wrapper)
     wrapper.__wl_bind_info__ = app, bindings

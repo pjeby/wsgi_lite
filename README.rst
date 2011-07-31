@@ -520,22 +520,33 @@ Current Status
 --------------
 
 The code in this repository is experi-mental, and possibly very-mental or
-just plain detri-mental.  It is not seriously tested or battle-hardened as yet:
-there are just some very basic acceptance tests and validation, enough to show
-a few basics working.  (See the "To-Test" list in ``tests.txt`` for what major
-tests are still needed.)
+just plain detri-mental.  It has not been seriously used or battle-hardened
+as yet, even though test coverage is now at 100%, and there are some fairly
+exhaustive WSGI compliance tests that exercise many obscure corners of the
+WSGI protocol.
 
-So, I've really just thrown this out there for people to see and play with
-early.  Stuff may change, break, or this could all have been a really stupid
-idea that doesn't actually work.  Don't throw this into production or even
-serious development just yet: it might *look* like it works, but you'd be wiser
-to wait until there's something more like full test coverage.  But if you're
-just experimenting with it to see how it works or whether you like it, go for
-it!  (And if you have any feedback, I'd love to hear from you...  preferably
-via the Web-SIG mailing list.)
+Ironically enough, however, that may well mean that there is important "WSGI"
+code out there that **won't** work with this module yet, precisely because that
+other code is *not* compliant with the spec!  So, while this project's code
+*should* work quite well for compliant code, this doesn't mean it will play
+well with all the code you're using in all your project(s).  Exercise it
+carefully, and don't assume that because it works great for one of your apps
+or middleware components, it'll therefore work great with all of them!
 
-Oh, and last, but not least...  this package is under the Apache license, since
-that's what the PSF uses for software contributed to Python, and I hope to see
-this protocol in a PEP and perhaps the stdlib in the future.  (Assuming we
-don't find some sort of glaring hole in the protocol or concept, of course.)
+In general, this is still alpha software, and things may change or break.  It
+might even be that the whole thing was a really stupid idea that won't actually
+work in the real world for some reason.
+
+So, I've really just thrown this out there for people to see and play with, so
+I can get some feedback on its actual usability.  Feel free to drop me an email
+via the Web-SIG mailing list, to let me know what you think.  Hopefully, we'll
+soon get any glitches sorted out, and nail this down to something that's less
+of a moving target, and maybe even turn it into a PEP and a stdlib
+contribution!
+
+(Oh, and last, but not least...  this package is under the Apache license,
+since that's what the PSF uses for software contributed to Python, and
+hopefully that's where this is headed, assuming we don't find some sort of
+glaring hole in the protocol or concept, of course, and it's in sufficiently
+high demand.)
 
