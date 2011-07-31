@@ -39,128 +39,46 @@ def maybe_rewrap(app, wrapper):
     return wrapper
 
 
-def iter_bindings(rule, environ):
-    """Yield possible matches of binding rule `rule` against `environ`
-
-    A `rule` may be a string (``basestring`` instance), callable, or iterable.
-    If a string, it's looked up in `environ`, and the result yielded if found.
-    If it's a callable, it's invoked on the environ, and the result iterated
-    over.  (That is, the callable must return a possibly-empty sequence.)
-    Otherwise, if the rule has an ``__iter__`` method, it's looped over, and
-    each element is treated as a rule, recursively.
-    """
-    if isinstance(rule, basestring):
-        if rule in environ:
-            yield environ[rule]
-    elif callable(rule):
-        for result in rule(environ):
-            yield result
-    elif hasattr(rule, '__iter__'):
-        for r in rule:
-            for result in iter_bindings(r, environ):
-                yield result
-    else:
-        raise TypeError(
-            "@bind value %r is not a tuple, callable, or string" % (v,)
-        )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def bind(__name__=None, __doc__=None, __module__=None, **kw):
-    """Bind environ keys to keyword arguments"""
-
-    if isinstance(__name__, function) or not kw:
-        raise TypeError("Usage is @bind(argname='environ key',...)")
-
-    def decorate(func):
-        def wrapper(environ, **args):
-            for argname, rule in kw.iteritems():
-                for value in iter_bindings(rule, environ):
-                    args[argname] = value
-                    break   # take only first matching value, if any
-            return func(environ, **args)
-
-        if is_lite(func):
-            raise TypeError("This decorator must be placed *after* @lite")
-
-        if isinstance(func, function):
-            if func.func_code is wrapper.func_code:
-                (inner_kw, func) = func.__wsgilite_binding__
-                for k in inner_kw:
-                    if k in kw:
-                        raise TypeError(
-                            "Rebound argument %r from %r to %r" %
-                            (k, inner_kw[k], kw[k])
-                        )
-                kw.update(inner_kw) 
-        if isinstance(func, function):
-            argnames = func.func_code.co_varnames[:func.func_code.co_argcount]
-            for k in kw:
-                if k not in argnames:
-                    raise TypeError("%r has no %r argument" % (func, k))            
-        wrapper = maybe_rewrap(func, wrapper)
-        wrapper.__wsgilite_binding__ = kw, func
-        
-    decorate = renamed(decorate, __name__ or 'with_'+'_'.join(kw))
-    decorate.__doc__ = __doc__
-    decorate.__module__ = __module__
-    return decorate
-
-
-class WSGIViolation(AssertionError):
-    """A WSGI protocol violation has occurred"""
-
-
-def lite(__name__=None, __doc__=None, __module__=None, **kw):
+def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
     """Wrap a WSGI Lite app for possible use in a plain WSGI server"""
-    isfunc = isinstance(__name__, function)
-    if kw:
-        if isfunc:
-            return lite(bind(**kw)(__name__))
-        else:
-            return bind(__name__, __doc__, __module__, **kw)
-    app = __name__
-    if not isfunc:
-        raise TypeError("Not a function: %r" % (app,))
-    elif __doc__ is not None or __module__ is not None:
+
+    isfunc = isinstance(__name_or_func__, function)
+    if isfunc and (__doc__ is not None or __module__ is not None):
         raise TypeError(
             "Usage: @lite or @lite(**kw) or lite(name,doc,module,**kw)"
         )
+    if kw:
+        if isfunc:
+            return rebinder(lite, **kw)(__name_or_func__)
+        else:
+            return rebinder(lite, __name_or_func__, __doc__, __module__, **kw)
+    elif not isfunc:
+        raise TypeError("Not a function: %r" % (__name_or_func__,))
+
+    app = __name_or_func__
     if is_lite(app):
         # Don't wrap something that supports wsgi_lite already
         return app
 
+    bindings = {}
     def wrapper(environ, start_response=None):
-        if start_response is None:
-            # Called via lite, just pass through as-is
-            return app(environ) 
+        if start_response is not None:
+            close = get_closer(environ)  # Support wsgi_lite.closing() callback
+            if bindings:
+                s, h, b = with_bindings(bindings, app, environ)
+            else:
+                s, h, b = app(environ)
+            start_response(s, h)
+            return wrap_response(b, close=close)
+        # Called via lite, just pass through as-is
+        if bindings:
+            return with_bindings(bindings, app, environ)       
+        else:
+            return app(environ)
 
-        # Support wsgi_lite.add_cleanup() callback
-        close = get_closer(environ)                
-        s, h, b = app(environ)
-        start_response(s, h)
-        return wrap_response(b, close=close)
-
-    return mark_lite(maybe_rewrap(app, wrapper))
-
-
-
-
-
+    wrapper = maybe_rewrap(app, wrapper)
+    wrapper.__wl_bind_info__ = app, bindings
+    return mark_lite(wrapper)
 
 def lighten(app):
     """Wrap a (maybe) non-lite app so it can be called with WSGI Lite"""
@@ -244,6 +162,9 @@ def _with_write_support(app, environ, _start_response):
     result = greenlet(wrap).switch()    
     return result
 
+class WSGIViolation(AssertionError):
+    """A WSGI protocol violation has occurred"""
+
 class ResponseWrapper:
     """Push-back and close() handler for WSGI body iterators
 
@@ -282,9 +203,6 @@ class ResponseWrapper:
                 self.result.close()
 
 
-
-
-
 def wrap_response(result, first=None, close=None):
     if first is None and close is None:
         return result
@@ -310,15 +228,15 @@ def get_closer(environ, chain=None):
         return close
 
 
+# Self-replacing stubs for binding support:
+def make_stub(name):
+    def stub(*args, **kw):
+        func = globals()[name] = f = getattr(__import__('wsgi_bindings'),name)
+        return f(*args, **kw)
+    globals()[name] = stub
 
-
-
-
-
-
-
-
-
+make_stub('with_bindings')
+make_stub('rebinder')
 
 
 
