@@ -31,7 +31,19 @@ Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
     ...     app = lighten(app)  
     ...     return middleware
 
+Using just two decorators, WSGI Lite lets you create correct and compliant
+middleware and applications, without needing to worry about ``start_response``,
+``write`` and ``close`` calls.  And with those *same* two decorators, it also
+lets you manage resources to be released at the end of a request, and
+automatically pass in keyword arguments to your apps or middleware that
+are obtained from the WSGI environment (like WSGI server extensions or
+middleware-supplied parameters).
 
+For more details, check out the `project's home page on BitBucket
+<https://bitbucket.org/pje/wsgi_lite/#toc>`_, and scroll down to the table
+of contents.
+
+.. _toc:
 .. contents:: Table of Contents
 
 
@@ -483,12 +495,12 @@ minus ``start_response()``, ``write()``, and ``close()``, but with the addition
 of the ``wsgi_lite.closing`` key.  That's pretty much it.
 
 
-Limitations
------------
+Known Limitations
+-----------------
 
 You knew there had to be a catch, right?
 
-Well, in this case, there are two.
+Well, in this case, there are three.
 
 First, if you ``lighten()`` a standard WSGI app that uses ``write()`` calls
 instead of using a response iterator, you **must** have the ``greenlet``
@@ -498,30 +510,33 @@ Why?  Well, it's complicated.  But the chances are pretty good that you don't
 have any code that uses ``write()``, and if you do, well, ``greenlet`` works on
 lots of platforms and Python versions.
 
-And second, speaking of Python versions, if you're using a version less than
-2.5, you need to have ``DecoratorTools`` installed as well.  Python 2.4 doesn't
-have ``functools`` in the standard library.)
-
-Second, no, third...  wait, I'll come in again.
-
-*Chief* amongst the limitations of WSGI Lite is that it cannot work around
-broken WSGI 1 middleware that lives *above* your application in the call stack!
+Anyway, that's the first limitation.  The second limitation is that WSGI Lite
+cannot work around broken WSGI 1 middleware that lives *above* your application
+in the call stack!  That is, if your code runs under a middleware component
+that alters your response, but forgets to make sure your app's response's
+``close()`` method gets called, then none of the fancy resource closing
+features in WSGI Lite will work properly.
 
 So, until standard WSGI servers support the ``wsgi_lite.closing``
-extension, you can (and should) work around this by wrapping your outermost
-middleware with a ``lighten()`` call.
+extension, you can (and should) work around this by wrapping your *entire*
+WSGI stack with a ``lighten()`` call.  This way, as long as your *server*
+isn't broken, it'll call WSGI Lite's closer, and all will be well with your
+resource closing.
 
-Last, but not least, the ``lighten()`` wrapper doesn't support broken WSGI
-apps that call ``write()`` from inside their returned iterators.  While many
-servers allow it, the WSGI specification forbids it, and to support it in
-WSGI Lite would force *all* wrapped WSGI 1 apps to pay in the form of
-unnecessary greenlet context switches, even if they never used ``write()`` at
-all.
+Third and finally, the ``lighten()`` wrapper doesn't support broken WSGI
+apps that call ``write()`` from inside their returned iterators.  While some
+servers allow it, the WSGI specification *explicitly* forbids it, and to
+support it in WSGI Lite would force *all* wrapped WSGI 1 apps to pay in the
+form of unnecessary greenlet context switches, even if they never used
+``write()`` at all.
 
 Since the current "word on the street" says that very few WSGI apps use
 ``write()`` at all, I figure it's okay to blow up on the even smaller number
 that are also spec violators, rather than burden *all* apps with extra overhead
-just to support the ill-behaved ones.
+just to support the ill-behaved ones.  However, if you feel otherwise, let
+me know about it via the Web-SIG.  (Especially if you have a workable
+suggestion for how to work around it without making things slower for the
+apps that don't call write()!)
 
 
 Current Status
