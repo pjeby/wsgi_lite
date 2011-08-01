@@ -9,11 +9,16 @@ Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
     >>> from wsgi_lite import lite, lighten
     
     >>> def latinator(app):
+    ... 
+    ...     # Make sure that `app` can be invoked via the Lite protocol, even
+    ...     # if it's a standard WSGI 1 app:
+    ...     app = lighten(app)  
+    ... 
     ...     @lite
     ...     def middleware(environ):
     ...         status, headers, body = app(environ)
     ...         for name, value in headers:
-    ...             if name.lower() == 'content-type' and value == 'text/plain':
+    ...             if name.lower()=='content-type' and value=='text/plain':
     ...                 break
     ...         else:
     ...             # Not text/plain, pass the request through unchanged 
@@ -26,9 +31,6 @@ Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
     ...         ]
     ...         return status, headers, (piglatin(data) for data in body)
     ... 
-    ...     # Make sure that `app` can be invoked via the Lite protocol, even
-    ...     # if it's a standard WSGI 1 app:
-    ...     app = lighten(app)  
     ...     return middleware
 
 Using just two decorators, WSGI Lite lets you create correct and compliant
@@ -37,11 +39,16 @@ middleware and applications, without needing to worry about ``start_response``,
 lets you manage resources to be released at the end of a request, and
 automatically pass in keyword arguments to your apps or middleware that
 are obtained from the WSGI environment (like WSGI server extensions or
-middleware-supplied parameters).
+middleware-supplied parameters such as request or session objects).
 
 For more details, check out the `project's home page on BitBucket
 <https://bitbucket.org/pje/wsgi_lite/#toc>`_, and scroll down to the table
 of contents.
+
+WSGI Lite is currently only available for Python 2.x (tested w/2.3 up to 2.7)
+but the source should be quite portable to 3.x, as its magic is limited to
+inspecting function argument names, and cloning functions using
+``new.function()``.  
 
 .. _toc:
 .. contents:: Table of Contents
@@ -51,18 +58,18 @@ Introducing WSGI Lite
 ---------------------
 
 If you've seen the ``Latinator`` example from the WSGI PEP, you may recall that
-it's about three times this much code and needs two classes, just to do the job
-right.  And, if you've ever tried to code a piece of middleware like this,
-you'll know just how hard it is to do it correctly.
+it's about three times longer than the example shown above, and it needs *two*
+classes* to do the same job.  And, if you've ever tried to code a piece of
+middleware like that, you'll know just how hard it is to do it correctly.
 
-In fact, as the author of the WSGI PEPs, I have almost never seen a single
+(In fact, as the author of the WSGI PEPs, I have almost never seen a single
 piece of WSGI middleware that doesn't break the WSGI protocol in some way that
-I couldn't find with a minute or two of code inspection.
+I couldn't find with a minute or two of code inspection!)
 
-But the above ``latinator`` middleware is actually a valid piece of WSGI 1.0
-middleware, that can *also* be called with a simpler, Rack-like protocol.  And
-all of the hard parts are abstracted away into two decorators: ``@lite``
-and ``lighten()``.
+But the ``latinator`` middleware example shown above is actually a valid piece
+of WSGI 1.0 middleware, that can *also* be called with a simpler, Rack-like
+protocol.  And all of the hard parts are abstracted away into two decorators:
+``@lite`` and ``lighten()``.
 
 The ``@lite`` decorator says, "this function is a WSGI application, but it
 expects to be called with an `environ` dictionary, and return a (`status`,
@@ -73,7 +80,8 @@ The ``@lite`` decorator then wraps the function in such a way that if it's
 called by a WSGI 1 server or middleware, it will act like a WSGI 1 application.
 But if it's called with just an `environ` (i.e., without a ``start_response``),
 it'll be just like you called the decorated function directly: that is,
-you'll get back a (`status`, `headers`, `body`) triplet.
+you'll get back a (`status`, `headers`, `body`) triplet (similar to the "Rack"
+protocol, aka Ruby's version of WSGI).
 
 Pretty neat, eh?  But the real magic comes in with the second decorator,
 ``lighten()``.  ``lighten()`` accepts either a ``@lite`` application or a
@@ -556,9 +564,9 @@ well with all the code you're using in all your project(s).  Exercise it
 carefully, and don't assume that because it works great for one of your apps
 or middleware components, it'll therefore work great with all of them!
 
-In general, this is still alpha software, and things may change or break.  It
-might even be that the whole thing was a really stupid idea that won't actually
-work in the real world for some reason.
+In general, though, this is still alpha software, and things may change or
+break.  It might even be that the whole thing was a really stupid idea that
+won't actually work in the real world for some reason.
 
 So, I've really just thrown this out there for people to see and play with, so
 I can get some feedback on its actual usability.  Feel free to drop me an email
