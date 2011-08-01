@@ -54,7 +54,7 @@ to fail::
     ...     return []
 
     >>> test(lite(lambda env: lighten(basic_write)(env)), _debug=False)
-    Status: 500 Dude, this is whack!
+    Status: 500 ...
     Content-Type: text/plain
     Content-Length: 59
     <BLANKLINE>
@@ -657,4 +657,4 @@ Response Wrapping:
 Other:
  * bind/lite stacking?
  * idempotence/modify-in-place nature of bind/lite stacking
-
+ * is_lite/mark_lite
