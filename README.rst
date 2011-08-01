@@ -8,28 +8,35 @@ Wouldn't it be nice if writing *correct* WSGI middleware was this simple?
 
     >>> from wsgi_lite import lite, lighten
     
-    def latinator(app):
-        @lite
-        def middleware(environ):
-            status, headers, body = app(environ)
-            for name, value in headers:
-                if name.lower() == 'content-type' and value == 'text/plain':
-                    break
-            else:
-                # Not text/plain, pass the request through unchanged 
-                return status, headers, body
-                    
-            # Strip content-length if present, else it'll be wrong
-            headers = [
-                (name, value) for name, value in headers
-                    if name.lower() != 'content-length'
-            ]
-            return status, headers, (piglatin(data) for data in body)
-    
-        # Make sure that `app` can be invoked via the Lite protocol, even
-        # if it's a standard WSGI 1 app:
-        app = lighten(app)  
-        return middleware
+    >>> def latinator(app):
+    ...     @lite
+    ...     def middleware(environ):
+    ...         status, headers, body = app(environ)
+    ...         for name, value in headers:
+    ...             if name.lower() == 'content-type' and value == 'text/plain':
+    ...                 break
+    ...         else:
+    ...             # Not text/plain, pass the request through unchanged 
+    ...             return status, headers, body
+    ...                 
+    ...         # Strip content-length if present, else it'll be wrong
+    ...         headers = [
+    ...             (name, value) for name, value in headers
+    ...                 if name.lower() != 'content-length'
+    ...         ]
+    ...         return status, headers, (piglatin(data) for data in body)
+    ... 
+    ...     # Make sure that `app` can be invoked via the Lite protocol, even
+    ...     # if it's a standard WSGI 1 app:
+    ...     app = lighten(app)  
+    ...     return middleware
+
+
+.. contents:: Table of Contents
+
+
+Introducing WSGI Lite
+---------------------
 
 If you've seen the ``Latinator`` example from the WSGI PEP, you may recall that
 it's about three times this much code and needs two classes, just to do the job
@@ -164,19 +171,19 @@ a tuple::
 This will check the environment for the named extensions in the order listed,
 and replace `routing` with the first one matched.
 
-These argument specifications are called "bindings", by the way.  A binding is
-either a string (i.e. an instance of ``basestring``), a callable object, or an
-iterable of bindings (recursively).  Strings are looked up in the environ, and
+These argument specifications are called "binding rules", by the way.  A rule
+is either a string (i.e. an instance of ``basestring``), a callable object, or
+an iterable of rules (recursively).  Strings are looked up in the environ, and
 iterables are tried in sequence until a lookup succeeds.
 
-Callable bindings, on the other hand, are looked up by being called with a
+Callable rules, on the other hand, are looked up by being called with a
 single positional argument: the `environ` dictionary.  They must return an
 iterable (or sequence) yielding zero or more items.  Returning an empty
 sequence or yielding zero items means the lookup failed, and a default value
-should be used instead (or the next alternative binding provided for that
+should be used instead (or the next alternative binding rule provided for that
 keyword argument).  Otherwise, the first item yielded is passed in as the
 matching keyword argument.  Here's an example of using a classmethod as a
-callable binding::
+callable binding rule::
 
     >>> class MyRequest(object):
     ...     def __init__(self, environ):
@@ -238,7 +245,8 @@ You can even use argument bindings *in your binding functions*, using the
     
 ``@bind()`` is just like ``@lite()`` with keyword arguments (including the
 ability to save and stack calls), except that it doesn't turn the decorated
-function into a WSGI app.
+function into a WSGI-compatible app.  (Which is a good thing, since a binding
+rule is not a WSGI app!)
 
 Now, given the above examples, you might be wondering what all that
 ``wsgi_lite.closing`` stuff is about.  Well, that's what we're going to talk

@@ -1,4 +1,5 @@
 syntax: glob
 .coverage
 htmlcov
+dist
 wsgi_lite.egg-info/**
