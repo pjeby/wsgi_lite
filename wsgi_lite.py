@@ -24,7 +24,11 @@ def _iter_greenlet(g=None):
         if v is not None:
             yield v
 
-from new import function
+try:
+    from new import function
+except ImportError:
+    from types import FunctionType as function
+    
 def renamed(f, name):
     return function(
         f.func_code, f.func_globals, name, f.func_defaults, f.func_closure

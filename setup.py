@@ -20,7 +20,7 @@ if sys.version < "2.5":
 
 def get_description():
     # Get our long description from the documentation
-    f = file('README.rst')
+    f = open('README.rst')
     lines = []
     for line in f:
         if not line.strip():
