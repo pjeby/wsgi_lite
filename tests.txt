@@ -593,6 +593,30 @@ Unless it's redefined to an equal (==) value::
       ...
     TypeError: Rebound argument 'x' from ['a'] to ('a',)
 
+Bindings can also be applied to methods::
+
+    >>> def m(self, environ, x, y="z"):
+    ...     print (self, x, y)
+
+    >>> m = bind(y='z')(bind(x='x')(m))
+
+    >>> class Classic:
+    ...     m = m
+
+    >>> class NewStyle(object):
+    ...     m = m
+    ...     cm = classmethod(m)
+    
+    >>> Classic().m(dict(x=1, z=2))
+    (<...Classic instance at ...>, 1, 2)
+
+    >>> NewStyle().m(dict(x=1, z=2))
+    (<NewStyle object at ...>, 1, 2)
+
+    >>> NewStyle.cm(dict(x=1, z=2))
+    (<class 'NewStyle'>, 1, 2)
+
+
 
 ``lite()`` Bindings
 -------------------
@@ -644,6 +668,124 @@ signatures::
     TypeError: Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)    
 
 
+Method/Class Support and Introspection
+======================================
+
+The @lite decorator supports methods by detecting a non-dict first argument::
+
+    >>> from wsgi_lite import is_lite
+    
+    >>> def hello_method(self, environ):
+    ...     """'lite' version of hello_world"""
+    ...     return (
+    ...         '200 OK', [('Content-type','text/plain')],
+    ...         ['Hello from ' + repr(self)]
+    ...     )
+
+    >>> class Classic:
+    ...     hello = lite(hello_method)
+
+    >>> is_lite(Classic)
+    False
+    >>> is_lite(Classic())
+    False
+    >>> is_lite(Classic.hello)
+    True
+    >>> is_lite(Classic().hello)
+    True
+
+    >>> test(Classic().hello)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: ...
+    <BLANKLINE>
+    Hello from <...Classic instance at ...>
+
+Which means it also works for classmethods::
+
+    >>> class NewStyle(object):
+    ...     hello = lite(hello_method)
+    ...     class_hello = classmethod(hello)
+
+    >>> is_lite(NewStyle)
+    False
+    >>> is_lite(NewStyle())
+    False
+    >>> is_lite(NewStyle.hello)
+    True
+    >>> is_lite(NewStyle().hello)
+    True
+    >>> is_lite(NewStyle.class_hello)
+    True
+    >>> is_lite(NewStyle().class_hello)
+    True
+
+    >>> test(NewStyle().hello)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: ...
+    <BLANKLINE>
+    Hello from <NewStyle object at ...>
+
+    >>> test(NewStyle.class_hello)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 29
+    <BLANKLINE>
+    Hello from <class 'NewStyle'>
+
+And you can subclass ``lite.app`` to make a class that's a lite app, if you
+define an ``app`` method::
+
+    >>> class AppClass(lite.app):
+    ...     app = hello_method
+
+    >>> is_lite(AppClass)
+    True
+
+    >>> is_lite(AppClass.app)
+    False
+
+    >>> test(AppClass)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: ...
+    <BLANKLINE>
+    Hello from <AppClass object at ...>
+
+To make *instances* of a class lite, you decorate the __call__ method::
+
+    >>> class Classic:
+    ...     __call__ = lite(hello_method)
+
+    >>> is_lite(Classic)
+    False
+    >>> is_lite(Classic())
+    True
+
+    >>> test(Classic())
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: ...
+    <BLANKLINE>
+    Hello from <...Classic instance at ...>
+
+
+    >>> class NewStyle(object):
+    ...     __call__ = lite(hello_method)
+
+    >>> is_lite(NewStyle)
+    False
+    >>> is_lite(NewStyle())
+    True
+
+    >>> test(NewStyle())
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: ...
+    <BLANKLINE>
+    Hello from <NewStyle object at ...>
+
 
 To-Test
 =======
@@ -653,18 +795,6 @@ Response Wrapping:
  * len() passes through to wrapped iterator
  * pushbacks
  * custom extra close - correct order
-
-Non-Function Apps:
- * Instance methods
- * Class methods
- * Static methods
- * Classes
-
-Non-Function binding rules that take bindings:
- * Instance methods
- * Class methods
- * Static methods
- * Classes (XXX not implemented)
 
 Other:
  * bind/lite stacking?

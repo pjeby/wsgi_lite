@@ -122,7 +122,22 @@ def _lite(app):
 
 
 class app:
-    """Base for types (as opposed to instances) that implement WSGI Lite"""
+    """Base for types (as opposed to instances) that implement WSGI Lite
+    e.g::
+
+        from wsgi_lite import lite
+        class MyApp(lite.app):
+            def app(self, environ):
+                # Actual implementation goes here
+
+    In the above example, ``MyApp`` is a WSGI-compatible app and can be called
+    with either the WSGI or WSGI Lite calling protocol.
+
+    Your `app()` method can use @lite or @lite-based decorators if you want it
+    to receive bindings.  Also, you can override ``__init__(self, environ)`` to
+    access the environment or receive bindings, if you want to do some common
+    setup before the app part runs.
+    """
 
     class __metaclass__(type):
         __wsgi_lite__ = True       
@@ -132,35 +147,20 @@ class app:
             return lite(self.app)(environ)
     
         __call__ = lite(__call__)
-        
+
+    def __new__(cls, environ):
+        return object.__new__(cls)
+
+    def __init__(self, environ):
+        """You can @bind arguments to your __init__, if you like"""
+       
     def app(self, environ):
-         raise NotImplementedError(
+        """Override this to implement your app"""
+        raise NotImplementedError(
             "You must define an app() method in your subclass!"
          )
 
 lite.app = app
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 def lighten(app):
     """Wrap a (maybe) non-lite app so it can be called with WSGI Lite"""
