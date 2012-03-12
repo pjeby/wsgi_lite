@@ -32,7 +32,8 @@ def _iter_greenlet(g=None):
         if v is not None:
             yield v
 
-from new import function, instancemethod
+from types import FunctionType as function, MethodType as instancemethod
+    
 def renamed(f, name):
     return function(
         f.func_code, f.func_globals, name, f.func_defaults, f.func_closure
