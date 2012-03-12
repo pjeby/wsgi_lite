@@ -547,6 +547,76 @@ suggestion for how to work around it without making things slower for the
 apps that don't call write()!)
 
 
+What if my app is a (class, instance, method, classmethod...)?
+--------------------------------------------------------------
+
+The ``@lite`` decorator supports other kinds of apps besides functions.  You
+can use instance methods, classmethods, callable instances, and even classes
+as WSGI Lite apps.
+
+For example, with this class::
+
+    >>> class Demo(object):
+    ...     @lite
+    ...     def an_app(self, environ):
+    ...         return hello_world(environ)
+    ...
+    ...     @classmethod
+    ...     @lite
+    ...     def app_factory(cls, environ):
+    ...         return cls().an_app(environ)
+
+both ``Demo().an_app`` and ``Demo.app_factory`` are WSGI and WSGI Lite
+applications; either may be called with an `environ` and an optional
+`start_response`::
+
+    >>> from wsgi_lite import is_lite
+
+    >>> is_lite(Demo.app_factory)
+    True
+
+    >>> is_lite(Demo().an_app)
+    True
+
+If you want to make a class whose *instances* are WSGI/Lite apps, however, you
+can just decorate your class's ``__call__`` method::
+    
+    >>> class MyInstancesAreApps:
+    ...     @lite
+    ...     def __call__(self, environ):
+    ...         return hello_world(environ)
+
+    >>> app = MyInstancesAreApps()
+    >>> is_lite(app)
+    True
+
+Note, however, that this makes *instances* of the class callable as apps.  The
+class *itself* is not an app::
+    
+    >>> is_lite(MyInstancesAreApps)
+    False
+
+So, if you want to make a class that is *itself* a WSGI/Lite app, you must
+subclass ``lite.app`` instead, and define an ``app`` method::
+
+    >>> class ThisIsAnApp(lite.app):
+    ...     def app(self, environ):
+    ...         return hello_world(environ)
+
+    >>> is_lite(ThisIsAnApp)
+    True
+
+When ``ThisIsAnApp`` is used as a WSGI or WSGI Lite app (i.e., when
+``ThisIsAnApp(environ[, optional_start_response])`` is called), an instance
+of the class will be created, and its ``app()`` method will be called, with
+the return value being interpreted as a ``status, headers, body`` sequence.
+
+Your ``app`` method can optionally be wrapped with ``@lite`` to add bindings.
+And, if you want, you can override ``__init__(self, environ)`` to do some
+setup using the environment, before ``app`` is called.  (You can even use
+``@bind``to add extra arguments to ``__init__``, if you like.)
+
+
 Current Status
 --------------
 
