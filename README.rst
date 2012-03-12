@@ -614,7 +614,7 @@ the return value being interpreted as a ``status, headers, body`` sequence.
 Your ``app`` method can optionally be wrapped with ``@lite`` to add bindings.
 And, if you want, you can override ``__init__(self, environ)`` to do some
 setup using the environment, before ``app`` is called.  (You can even use
-``@bind``to add extra arguments to ``__init__``, if you like.)
+``@bind`` to add extra arguments to ``__init__``, if you like.)
 
 
 Current Status
