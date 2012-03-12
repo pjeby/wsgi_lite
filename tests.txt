@@ -1,0 +1,672 @@
+The Lite Protocol
+=================
+
+
+Standard WSGI Apps
+------------------
+
+We'll use the ``test()`` function to simulate a WSGI server::
+
+    >>> from test_wsgi_lite import test
+
+    >>> def hello_world(environ, start_response):
+    ...     """Standard WSGI version of hello_world"""
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     return ['Hello world!']
+
+    >>> test(hello_world)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 12
+    <BLANKLINE>
+    Hello world!
+
+As you can see, it runs regular WSGI apps normally.  Now let's try some
+``@lite`` and ``lighten()`` apps::
+
+    >>> from wsgi_lite import lite, lighten
+
+
+Greenlet Support
+----------------
+
+Greenlet support for ``write()`` calls can be explicitly disabled, even if the
+greenlet module is present, using the ``wsgi_lite.use_greenlets`` flag::
+
+    >>> import wsgi_lite
+    >>> wsgi_lite.use_greenlets
+    True
+
+The flag defaults to true, but greenlets still won't be used if the greenlet
+module isn't present.  Disabling greenlets *may* give a *miniscule* performance
+boost for WSGI 1 apps that do a lot of yielding and are wrapped by WSGI Lite
+middleware, but a better reason for disabling it would be if, say, you have
+a buggy greenlet implementation installed.
+
+In any case, disabling it will cause lighten()-ed WSGI 1 apps that use write()
+to fail::
+
+    >>> wsgi_lite.use_greenlets = False
+
+    >>> def basic_write(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello world!')
+    ...     return []
+
+    >>> test(lite(lambda env: lighten(basic_write)(env)), _debug=False)
+    Status: 500 ...
+    Content-Type: text/plain
+    Content-Length: 59
+    <BLANKLINE>
+    A server error occurred.  Please contact the administrator.
+    --- Log Output ---
+    Traceback (most recent call last):
+      ...
+    NotImplementedError: Greenlets are disabled or missing
+    <BLANKLINE>
+
+The rest of the tests in this file will be run with greenlet use disabled; for
+the tests that fully exercise the write() functionality, see
+greenlet-tests.txt.
+
+
+``lighten()``
+-------------
+
+Lightening a standard WSGI app leaves it still able to do normal WSGI, via
+a pass-through::
+
+    >>> test(lighten(hello_world))
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 12
+    <BLANKLINE>
+    Hello world!
+
+Wrapped functions are roughly the same as their original in terms of
+attributes, docstrings, etc. (as long as either functools or DecoratorTools
+are available)::
+
+    >>> help(hello_world)
+    Help on function hello_world:
+    <BLANKLINE>
+    hello_world(environ, start_response)
+        Standard WSGI version of hello_world
+    <BLANKLINE>
+
+And wrapping is idempotent, so lightening an already-lightened function returns
+the same (wrapped) function::
+
+    >>> hw = lighten(hello_world)
+    >>> lighten(hw) is hw
+    True
+
+But the second argument of the wrapped function is always optional (despite
+being required by the original)::
+
+    >>> help(lighten(hello_world))
+    Help on function hello_world...:
+    <BLANKLINE>
+    hello_world(...)
+        Standard WSGI version of hello_world
+    <BLANKLINE>
+
+So that the lightened function can support being called with the single-
+argument protocol, as well as standard WSGI::
+
+    >>> to_close = []
+    >>> empty_env = {'wsgi_lite.closing': to_close.append}
+
+    >>> lighten(hello_world)(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+If a returned body iterator doesn't have a ``close()`` method, it's not
+registered with the "closing" extension::
+
+    >>> to_close
+    []
+
+But it is registered, if it does have one::
+
+    >>> def hello_from_file(environ, start_response):
+    ...     from StringIO import StringIO
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     return StringIO('Hello world!')
+
+    >>> lighten(hello_from_file)(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], <StringIO.StringIO ...>)
+
+    >>> to_close
+    [<StringIO.StringIO ...>]
+
+And a ``wsgi_lite.closing`` extension is provided for the benefit of any child
+applications::
+
+    >>> class closable:
+    ...     def __init__(self, msg):
+    ...         self.msg = msg
+    ...     def close(self):
+    ...         print self.msg
+
+    >>> def check_for_closing_extension(environ, start_response):
+    ...     start_response('200 OK', [('Content-type','text/plain')])
+    ...     yield "Hello, world!"
+    ...     if 'wsgi_lite.closing' in environ:
+    ...         yield "\nClosing extension found"
+    ...         c = closable("Help, I'm being closed, too!")
+    ...         closing = environ['wsgi_lite.closing']
+    ...         if c is closing(c):
+    ...             yield "\nclosing(x) returns x"
+    ...         yield "\n"+str(closing(closable("I'll be closed first")))
+
+    >>> test(lighten(check_for_closing_extension))
+    I'll be closed first
+    Help, I'm being closed, too!
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello, world!
+    Closing extension found
+    closing(x) returns x
+    <...closable instance at ...>
+
+Whereas calling the same function without ``lighten()`` doesn't end up with a
+closing extension::
+
+    >>> test(check_for_closing_extension)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello, world!
+
+
+``@lite``
+---------
+
+A "lite" app only takes an environ, and returns a status/headers/body triple::
+
+    >>> def hello_lite(environ):
+    ...     """'lite' version of hello_world"""
+    ...     return (
+    ...         '200 OK', [('Content-type','text/plain')],
+    ...         ['Hello world!']
+    ...     )
+
+But if wrapped with ``@lite``, is still usable in a standard WSGI server::
+
+    >>> test(lite(hello_lite))
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 12
+    <BLANKLINE>
+    Hello world!
+
+Because in this case, the wrapper *adds* an optional start_response parameter::
+
+    >>> help(lite(hello_lite))
+    Help on function hello_lite...:
+    <BLANKLINE>
+    hello_lite(...)
+        'lite' version of hello_world
+    <BLANKLINE>
+
+Instead of making an existing parameter optional::
+
+    >>> help(hello_lite)
+    Help on function hello_lite:
+    <BLANKLINE>
+    hello_lite(environ)
+        'lite' version of hello_world
+    <BLANKLINE>
+
+So that calling it with just one argument returns a status/headers/body tuple::
+
+    >>> lite(hello_lite)(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+just as was the case for the underlying function::
+
+    >>> hello_lite(empty_env)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+
+Even so, as with ``lighten()``, ``@lite`` is idempotent::
+
+    >>> hw = lite(hello_lite)
+    >>> lite(hw) is hw
+    True
+
+Also, ``lighten()`` and ``@lite`` are idempotent to each other, as well as
+themselves::
+
+    >>> hw = lite(hello_lite)
+    >>> lighten(hw) is hw
+    True
+
+    >>> hw = lighten(hello_world)
+    >>> lite(hw) is hw
+    True
+
+Like, ``lighten()``, ``@lite`` provides a resource-closing protocol
+implementation, if called from a standard WSGI server::
+
+    >>> def lite_closing(environ, closing):
+    ...     def body():
+    ...         yield "Hello, world!"
+    ...         c = closable("Help, I'm being closed, too!")
+    ...         if c is closing(c):
+    ...             yield "\nclosing(x) returns x"
+    ...         yield "\n"+str(closing(closable("I'll be closed first")))
+    ...     return '200 OK', [('Content-type','text/plain')], body()
+
+    >>> test(lite(closing='wsgi_lite.closing')(lite_closing))
+    I'll be closed first
+    Help, I'm being closed, too!
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello, world!
+    closing(x) returns x
+    <...closable instance at ...>
+
+But if called via the "lite" protocol, or with an existing "closing" extension,
+the built-in implementation won't be added::
+
+    >>> to_close = []
+    >>> empty_env = {'wsgi_lite.closing': to_close.append}
+
+    >>> s, h, b  = lite(closing='wsgi_lite.closing')(lite_closing)(empty_env)
+    >>> s, h
+    ('200 OK', [('Content-type', 'text/plain')])
+
+    >>> print ''.join(b)
+    Hello, world!
+    None
+
+    >>> to_close
+    [<...closable instance at ...>, <...closable instance at ...>]
+
+    >>> [c.msg for c in to_close]
+    ["Help, I'm being closed, too!", "I'll be closed first"]
+
+
+Middleware
+----------
+
+Now let's try using some WSGI Lite middleware built with ``@lite`` and
+``lighten()``.  We'll use the ``latinator`` example from our README file::
+
+    >>> from test_wsgi_lite import latinator
+
+First, wrapping plain old WSGI::
+
+    >>> test(latinator(hello_world))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+Then, wrapping a ``@lite`` application (called via WSGI or WSGI Lite)::
+
+    >>> test(latinator(lite(hello_lite)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> s, h, b = latinator(lite(hello_lite))(empty_env)
+    >>> s, h, list(b)
+    ('200 OK', [('Content-type', 'text/plain')], ['elloHay orldway!'])
+
+And a ``lighten()``-ed one::
+
+    >>> test(latinator(lighten(hello_world)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> s, h, b = latinator(lighten(hello_world))(empty_env)
+    >>> s, h, list(b)
+    ('200 OK', [('Content-type', 'text/plain')], ['elloHay orldway!'])
+
+
+As you can see, when you write middleware using ``@lite`` to wrap the
+middleware, and ``lighten()`` to wrap the called app, all of the hard bits
+of WSGI response processing get abstracted away.
+
+Just to be sure, though, let's check our WSGI compliance out a bit::
+
+    >>> from wsgiref.validate import validator
+    >>> vtest = lambda *args, **kw: test(QUERY_STRING='', *args, **kw)
+
+    >>> vtest(validator(latinator(validator(hello_world))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(latinator(validator(lighten(hello_world)))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(latinator(validator(lite(hello_lite)))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+
+WSGI Torture Tests
+------------------
+
+Here, we'll be verifying correct performance in various WSGI edge cases and
+protocol violations, as they're converted to the lite protocol.  This is a
+helper function so we can ``lighten()`` an app, and see what the resulting
+body output is::
+
+    >>> def test_lite(func):
+    ...     s, h, b = lighten(func)(empty_env)
+    ...     return s, h, list(b)
+
+It's legal for a WSGI app to yield some empty strings before it sets headers::
+
+    >>> def yield_before_headers(env, sr):
+    ...     yield ''
+    ...     yield ''
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    
+    >>> test_lite(yield_before_headers)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+But it's illegal for it to yield non-empty strings first::
+
+    >>> def late_starter(env, sr):
+    ...     yield ''
+    ...     yield 'Hello world!'
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    
+    >>> test_lite(late_starter)
+    Traceback (most recent call last):
+      ...
+    WSGIViolation: Data yielded without start_response
+
+And it's legal to change your mind about the headers, as long as you haven't
+output any data yet::
+
+    >>> def changed_headers(env, sr):
+    ...     sr('200 OK', [('Content-type', 'text/xml')])
+    ...     yield ''
+    ...     sr('200 OK', [('Content-type', 'text/html')])
+    ...     yield ''
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    
+    >>> test_lite(changed_headers)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+But it's *not* legal to change them once the data is yielded::
+
+    >>> def replaced_headers(env, sr):
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    ...     sr('200 OK', [('Content-type', 'text/html')])
+    
+    >>> test_lite(replaced_headers)
+    Traceback (most recent call last):
+      ...
+    WSGIViolation: Headers already sent & no exc_info given
+
+Unless you pass in an exception triplet, in which case it's raised::
+
+    >>> def replaced_headers_with_error(env, sr):
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+    ...     exc_info = NameError, NameError('foo'), None
+    ...     sr('200 OK', [('Content-type', 'text/html')], exc_info)
+
+    >>> test_lite(replaced_headers_with_error)
+    Traceback (most recent call last):
+      ...
+    NameError: foo
+
+But it's *not* raised if you pass it in at a point when non-empty data hasn't
+been yielded yet::
+
+    >>> def early_headers_with_error(env, sr):
+    ...     yield ''
+    ...     exc_info = NameError, NameError('foo'), None
+    ...     sr('200 OK', [('Content-type', 'text/html')], exc_info)
+    ...     sr('200 OK', [('Content-type', 'text/plain')])
+    ...     yield 'Hello world!'
+
+    >>> test_lite(early_headers_with_error)
+    ('200 OK', [('Content-type', 'text/plain')], ['Hello world!'])
+
+
+
+Argument Bindings
+=================
+
+In this section, we'll be testing the features provided by the
+``wsgi_bindings`` module::
+
+    >>> from wsgi_bindings import bind, with_bindings, iter_bindings
+
+
+``iter_bindings()``
+-------------------
+
+Used to implement the argument binding system, ``iter_bindings()`` yields
+possible matches for a binding rule applied to a dictionary (e.g., a WSGI
+environment)::
+
+    >>> list(iter_bindings('x', dict(x=1)))
+    [1]
+
+With an empty result indicating a failure to find a match::
+
+    >>> list(iter_bindings('x', dict(y=2)))
+    []
+
+Sequences of rules are applied sequentially, with all matches being yielded::
+
+    >>> list(iter_bindings(['x','y'], dict(y=2)))
+    [2]
+
+    >>> list(iter_bindings(['x','y'], dict(y=2, x=1)))
+    [1, 2]
+
+And this applies recursively::
+
+    >>> list(iter_bindings(['w', ['x','y'], 'z'], dict(y=2, x=1, w=0, z=3)))
+    [0, 1, 2, 3]
+
+Callables are invoked on the environment, and are expected to yield their own
+values in turn::
+
+    >>> def b(environ):
+    ...     for k in 'x', 'y', 'z':
+    ...         if k in environ:
+    ...             yield environ[k]
+
+    >>> list(iter_bindings(b, dict(y=2, x=1, w=0, z=3)))
+    [1, 2, 3]
+
+and of course, you can have include the callables in sequences, too::
+
+    >>> list(iter_bindings(['w', b, 'q'], dict(y=2, x=1, w=0, z=3)))
+    [0, 1, 2, 3]
+
+But an object *must* be a ``basestring``, a ``callable()``, or have an
+``__iter__`` method, in order to be considered a rule::
+
+    >>> list(iter_bindings(1, dict()))
+    Traceback (most recent call last):
+      ...
+    TypeError: binding rule 1 is not an iterable, callable, or string
+
+
+``with_bindings()``
+-------------------
+
+Given a dictionary mapping argument names to binding rules, ``with_bindings()``
+invokes a function with a given environment, adding keyword arguments for the
+first result yielded by ``iter_bindings()`` for the matching rule::
+
+    >>> with_bindings(dict(x='y'), (lambda env, x: x), dict(y=42))
+    42
+
+    >>> with_bindings(dict(x=['q', 'y']), (lambda env, x: x), dict(y=42))
+    42
+
+    >>> with_bindings(dict(x=['q', 'y']), (lambda env, x: x), dict(y=42, q=23))
+    23
+
+If a rule doesn't match, its keyword argument isn't added::
+
+    >>> with_bindings(dict(x='y'), (lambda env, x=99: x), dict(q=23))
+    99
+
+
+``@bind``
+---------
+
+It should be possible to save a binding and give it a name, docstring, and
+module::
+
+    >>> with_x_x = bind('with_x_x', "A docstring", "doctest", x='x')
+
+    >>> with_x_x.__name__, with_x_x.__doc__, with_x_x.__module__
+    ('with_x_x', 'A docstring', 'doctest')
+
+With reasonable defaults if these items are omitted::
+
+    >>> help(bind(x='x'))
+    Help on function with_x...:
+    <BLANKLINE>
+    with_x(func)
+    <BLANKLINE>
+
+Bindings can be applied to a function that has matching keyword argument
+names::
+
+    >>> bind(x='x')(lambda env, x: x)
+    <function <lambda> at ...>
+
+But it's an error if the function lacks a matching argument name::
+
+    >>> bind(x='x')(lambda env, y: y)
+    Traceback (most recent call last):
+      ...
+    TypeError: <function <lambda> at ...> has no 'x' argument
+
+
+Bindings can be stacked in any order, with the same result::
+
+    >>> def f(environ, x, y="z"):
+    ...     print (x, y)
+
+    >>> bind(y='z')(bind(x='x')(f))(dict(x=1, z=2))
+    (1, 2)
+
+    >>> bind(x='x')(bind(y='z')(f))(dict(x=1, z=2))
+    (1, 2)
+
+But you can't redefine a binding that's already defined in the same stack::
+
+    >>> bind(x='b')(bind(x='a')(f))
+    Traceback (most recent call last):
+      ...
+    TypeError: Rebound argument 'x' from 'a' to 'b'
+
+Unless it's redefined to an equal (==) value::
+
+    >>> bind(x='x')(bind(x='x')(f))(dict(x=1, z=2))
+    (1, 'z')
+
+    >>> bind(x=('a',))(bind(x=['a'])(f))
+    Traceback (most recent call last):
+      ...
+    TypeError: Rebound argument 'x' from ['a'] to ('a',)
+
+
+``lite()`` Bindings
+-------------------
+
+The ``@lite`` decorator accepts keyword arguments, just like ``@bind``,
+and allows calls to be saved with a name, docstring, and module::
+
+    >>> with_x_y = lite('with_x_y', "Another docstring", "doctest", x='y')
+
+    >>> with_x_y.__name__, with_x_x.__doc__, with_x_x.__module__
+    ('with_x_y', 'A docstring', 'doctest')
+
+
+With reasonable defaults if these items are omitted::
+
+    >>> help(lite(y='z'))
+    Help on function with_y...:
+    <BLANKLINE>
+    with_y(func)
+    <BLANKLINE>
+
+But unlike ``@bind``, you **must** either provide keywords (with optional
+naming arguments) **or** a single function, rather than any other
+signatures::
+
+    >>> lite()
+    Traceback (most recent call last):
+      ...
+    TypeError: Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)    
+
+    >>> lite('x')
+    Traceback (most recent call last):
+      ...
+    TypeError: Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)    
+
+    >>> lite(lambda e:e, "A docstring")
+    Traceback (most recent call last):
+      ...
+    TypeError: Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)    
+
+    >>> lite(__module__="doctest")
+    Traceback (most recent call last):
+      ...
+    TypeError: Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)    
+
+    >>> lite(lambda e:e, x=1)
+    Traceback (most recent call last):
+      ...
+    TypeError: Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)    
+
+
+
+To-Test
+=======
+
+Response Wrapping:
+ * close() only happens once
+ * len() passes through to wrapped iterator
+ * pushbacks
+ * custom extra close - correct order
+
+Non-Function Apps:
+ * Instance methods
+ * Class methods
+ * Static methods
+ * Classes
+
+Non-Function binding rules that take bindings:
+ * Instance methods
+ * Class methods
+ * Static methods
+ * Classes (XXX not implemented)
+
+Other:
+ * bind/lite stacking?
+ * idempotence/modify-in-place nature of bind/lite stacking
+ * is_lite/mark_lite

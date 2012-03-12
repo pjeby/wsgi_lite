@@ -1,0 +1,192 @@
+----------------------------------
+Greenlet-Based Support for write()
+----------------------------------
+
+We need greenlet use activated for these tests to succeed::
+
+    >>> import wsgi_lite
+    >>> wsgi_lite.use_greenlets = True
+
+and to perform the tests, we need a wrapper to convert a standard WSGI app to
+"lite" and back again::
+
+    >>> from wsgi_lite import lite, lighten
+    >>> from test_wsgi_lite import test
+
+    >>> def dilute(app):
+    ...     """Wrap a WSGI 1 app in a forced WSGI Lite invocation"""
+    ...     app = lighten(app)
+    ...     def null(environ):
+    ...         return app(environ)
+    ...     return lite(null)
+
+We'll also use the ``latinator`` example middleware to test some interop
+scenarios::
+
+    >>> from test_wsgi_lite import latinator
+
+And a handy validator object to check WSGI compliance::
+
+    >>> from wsgiref.validate import validator
+    >>> vtest = lambda *args, **kw: test(QUERY_STRING='', *args, **kw)
+
+
+Basic write()s with empty iterators
+===================================
+
+
+Single-Write
+------------
+
+    >>> def basic_write(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello world!')
+    ...     return []
+
+    >>> test(basic_write)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(dilute(basic_write))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(latinator(dilute(basic_write)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> test(dilute(latinator(basic_write)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(dilute(validator(basic_write))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> vtest(validator(latinator(validator(dilute(validator(basic_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(dilute(validator(latinator(validator(basic_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+
+Multi-Write
+------------
+
+    >>> def double_write(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello ')
+    ...     write('world!')
+    ...     return []
+
+    >>> test(double_write)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(dilute(double_write))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(latinator(dilute(double_write)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> test(dilute(latinator(double_write)))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> test(validator(double_write), QUERY_STRING='')
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> vtest(validator(dilute(validator(double_write))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> vtest(validator(latinator(validator(dilute(validator(double_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+    >>> vtest(validator(dilute(validator(latinator(validator(double_write))))))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    elloHay orldway!
+
+
+
+Mixed write() and iteration
+===========================
+
+It's a spec violation  to call write() from your body iterator, even though
+most servers don't care::
+
+    >>> def empty_writerator(environ, start_response):
+    ...     """This technically violates the WSGI spec"""
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello world!')
+    ...     if False: yield ''
+
+    >>> test(empty_writerator)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+    >>> test(dilute(empty_writerator), _debug=False)
+    Status: 500 ...
+    Content-Type: text/plain
+    Content-Length: 59
+    <BLANKLINE>
+    A server error occurred.  Please contact the administrator.
+    --- Log Output ---
+    Traceback (most recent call last):
+      ...
+    WSGIViolation: Applications MUST NOT invoke write() from within
+                   their return iterable - see PEP 333/3333
+    <BLANKLINE>
+
+You can however, return an iterator from your body, even if you use write()::
+
+    >>> def mixed_writer(environ, start_response):
+    ...     write = start_response('200 OK', [('Content-type','text/plain')])
+    ...     write('Hello ')
+    ...     return ['world!']
+
+    >>> test(dilute(mixed_writer))
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world!
+
+
