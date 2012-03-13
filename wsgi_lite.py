@@ -85,7 +85,7 @@ def maybe_rewrap(app, wrapper, proxy=False):
         if args and type(args[0]) is not dict:
             self = args[0]
             args = args[1:]                
-            return wrapper(instancemethod(app, self, type(self)), *args)
+            return wrapper(instancemethod(app, self), *args)
         return wrapper(app, *args)
     
     if isinstance(app, function):
