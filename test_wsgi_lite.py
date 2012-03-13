@@ -126,12 +126,20 @@ def additional_tests():
     tests = ['tests.txt']
     if sys.version>='2.4':
         tests.append('README.rst')
+
     try:
         from greenlet import greenlet
     except ImportError:
         pass
     else:
         tests.append('greenlet-tests.txt')
+
+    try:
+        from peak.util.proxies import AbstractWrapper
+    except ImportError:
+        pass
+    else:
+        tests.append('proxy-tests.txt')
 
     import doctest
     return doctest.DocFileSuite(
@@ -140,17 +148,6 @@ def additional_tests():
                     | doctest.REPORT_ONLY_FIRST_FAILURE,
         *tests
     )
-
-
-
-
-
-
-
-
-
-
-
 
 
 

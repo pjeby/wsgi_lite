@@ -1,0 +1,59 @@
+lighten() Proxying
+==================
+
+If you ``lighten()`` an object that's not a function, all of that object's
+underlying behavior is transparently available (as long as the ``ProxyTypes``
+package is installed)::
+
+    >>> from wsgi_lite import lighten
+    >>> from test_wsgi_lite import test
+
+    >>> lighten(2)
+    2
+
+    >>> lighten([1])[0]
+    1
+
+    >>> lighten("x").upper()
+    'X'
+
+    >>> class X(object):
+    ...     foo = "bar"
+    ...     def __init__(self, environ, start_response):
+    ...         start_response('200 OK', [('Content-type', 'text/plain')])
+    ...     def __iter__(self):
+    ...         yield "Hello world"
+
+    >>> x = lighten(X)
+    >>> x
+    <class 'X'>
+    
+    >>> x.foo
+    'bar'
+
+    >>> test(x)
+    Status: 200 OK
+    Content-type: text/plain
+    <BLANKLINE>
+    Hello world
+
+    >>> class X(object):    
+    ...     foo = "bar"
+    ...     def __call__(self, environ, start_response):
+    ...         start_response('200 OK', [('Content-type', 'text/plain')])
+    ...         return ["Hello world"]
+
+    >>> x = lighten(X())
+    >>> x
+    <X object at ...>
+
+    >>> x.foo
+    'bar'
+
+    >>> test(x)
+    Status: 200 OK
+    Content-type: text/plain
+    Content-Length: 11
+    <BLANKLINE>
+    Hello world
+

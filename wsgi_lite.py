@@ -39,8 +39,48 @@ def renamed(f, name):
         f.func_code, f.func_globals, name, f.func_defaults, f.func_closure
     )
 
+try:
+    from peak.util.proxies import AbstractWrapper
+except ImportError:
+    # No proxy types?   Sorry, can't use enhanced app attributes
+    def CallableProxy(app, wrapped):
+        return wrapped
+else:
+    class CallableProxy(AbstractWrapper):
+        """Proxy an object, replacing its __call__ method
 
-def maybe_rewrap(app, wrapper):
+        This class (which is only used if the ProxyTypes package is installed)
+        allows calling objects like WebOb's Response with the lite protocol via
+        ``lighten()``, while still retaining all their enhanced (non-WSGI)
+        functionality.
+
+        That is, if you have ProxyTypes installed, and ``lighten()`` a
+        non-function WSGI app like a WebOb Response object, you'll still be
+        able to use all the regular response methods, *and* call it using the
+        Lite protocol instead of WSGI.
+        """    
+        __slots__ = ["__subject__", "__lite_wrapper__"]
+    
+        def __init__(self, subject, wrapped):
+            self.__subject__ = subject
+            object.__setattr__(self, '__lite_wrapper__', wrapped)
+    
+        def __call__(self, *args):
+            wrapper = object.__getattribute__(self, '__lite_wrapper__')
+            return wrapper(*args)
+    
+        def __getattribute__(self, attr):
+            if attr == '__wsgi_lite__':
+                return True
+            return AbstractWrapper.__getattribute__(self, attr)
+
+        def __setattr__(self, attr, val):
+            if attr != '__wsgi_lite__' or val is not True:
+                return AbstractWrapper.__setattr__(self, attr, val)
+            
+
+
+def maybe_rewrap(app, wrapper, proxy=False):
     def wrapped(*args):
         if args and type(args[0]) is not dict:
             self = args[0]
@@ -53,8 +93,8 @@ def maybe_rewrap(app, wrapper):
         wrapped.__module__ = app.__module__
         wrapped.__doc__    = app.__doc__
         wrapped.__dict__.update(app.__dict__)
-    #else:
-    #    return AppProxy(app, wrapped)
+    elif proxy:
+        return CallableProxy(app, wrapped)
     return wrapped
 
 
@@ -202,7 +242,7 @@ def lighten(app):
             closing(result)
         headerinfo.append(result)
         return tuple(headerinfo)
-    return mark_lite(maybe_rewrap(app, wrapper))
+    return mark_lite(maybe_rewrap(app, wrapper, True))
 
 def _with_write_support(app, environ, _start_response):
     if greenlet is None or not use_greenlets:
