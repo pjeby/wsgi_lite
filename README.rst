@@ -58,7 +58,7 @@ Introducing WSGI Lite
 ---------------------
 
 If you've seen the ``Latinator`` example from the WSGI PEP, you may recall that
-it's about three times longer than the example shown above, and it needs *two*
+it's about three times longer than the example shown above, and it needs *two
 classes* to do the same job.  And, if you've ever tried to code a piece of
 middleware like that, you'll know just how hard it is to do it correctly.
 
