@@ -1,6 +1,7 @@
 __all__ = ['bind', 'with_bindings', 'iter_bindings']
-
 from wsgi_lite import maybe_rewrap, renamed, function
+import inspect
+basestring = getattr(__builtins__, 'basestring', str)
 
 def iter_bindings(rule, environ):
     """Yield possible matches of binding rule `rule` against `environ`
@@ -30,14 +31,13 @@ def iter_bindings(rule, environ):
 def with_bindings(bindings, app, environ):
     """Call app(environ, **computed_bindings)"""
     args = {}
-    for argname, rule in bindings.iteritems():
+    for argname, rule in bindings.items():
         for value in iter_bindings(rule, environ):
             args[argname] = value
             break   # take only first matching value, if any            
     if args:
         return app(environ, **args)
     return app(environ)
-
 
 def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
     """Bind environ keys to keyword arguments on a lite-wrapped app"""
@@ -53,12 +53,12 @@ def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
                 )
         bindings.update(kw)
         if isinstance(f, function):
-            argnames = f.func_code.co_varnames[:f.func_code.co_argcount]
+            argnames = inspect.getargspec(f)[0]
             for argname in kw:
                 if argname not in argnames:
                     raise TypeError("%r has no %r argument" % (f, argname))            
         return func
-        
+
     decorate = renamed(decorate, __name__ or 'with_'+'_'.join(kw))
     decorate.__doc__ = __doc__
     decorate.__module__ = __module__

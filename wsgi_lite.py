@@ -23,7 +23,8 @@ def is_lite(app):
     # XXX this doesn't handle random functions tacked onto a classic class!
     call = getattr(app, '__call__', None)
     if getattr(call, '__wsgi_lite__', False) and not isinstance(call, function):
-        return not isinstance(call, instancemethod) or call.im_self is app
+        return not isinstance(call, instancemethod) or \
+            getattr(call, 'im_self', getattr(call, '__self__', None)) is app
     return False
 
 def _iter_greenlet(g=None):
@@ -32,12 +33,11 @@ def _iter_greenlet(g=None):
         if v is not None:
             yield v
 
-from types import FunctionType as function, MethodType as instancemethod
-    
-def renamed(f, name):
-    return function(
-        f.func_code, f.func_globals, name, f.func_defaults, f.func_closure
-    )
+from types import FunctionType as function, MethodType as instancemethod   
+
+
+
+
 
 try:
     from peak.util.proxies import AbstractWrapper
@@ -89,7 +89,7 @@ def maybe_rewrap(app, wrapper, proxy=False):
         return wrapper(app, *args)
     
     if isinstance(app, function):
-        wrapped = renamed(wrapped, app.func_name)
+        wrapped = renamed(wrapped, app.__name__)
         wrapped.__module__ = app.__module__
         wrapped.__doc__    = app.__doc__
         wrapped.__dict__.update(app.__dict__)
@@ -97,6 +97,14 @@ def maybe_rewrap(app, wrapper, proxy=False):
         return CallableProxy(app, wrapped)
     return wrapped
 
+def renamed(f, name):
+    try:
+        f.__name__ = name
+    except TypeError:   # 2.3 doesn't allow renames
+        f = function(
+            f.func_code, f.func_globals, name, f.func_defaults, f.func_closure
+        )
+    return f
 
 def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
     """Wrap a WSGI Lite app for possible use in a plain WSGI server"""
@@ -110,14 +118,6 @@ def lite(__name_or_func__=None, __doc__=None, __module__=None, **kw):
         raise TypeError(
             "Usage: @lite or @lite(**kw) or lite(name?, doc?, module?, **kw)"
         )
-
-
-
-
-
-
-
-
 
 
 
@@ -149,14 +149,14 @@ def _lite(app):
     wrapper.__wl_bind_info__ = app, bindings
     return mark_lite(wrapper)
 
-
-
-
-
-
-
-
-
+def _raise(exc_info):
+    try:
+        if hasattr(exc_info[1], '__traceback__'):
+            exec ("raise exc_info[1].with_traceback(exc_info[2])")
+        else:
+            exec ("raise exc_info[0], exc_info[1], exc_info[2]")
+    finally:
+        exc_info = None
 
 
 
@@ -200,7 +200,7 @@ class app:
         raise NotImplementedError(
             "You must define an app() method in your subclass!"
          )
-
+if not isinstance(app, app.__metaclass__): app = app.__metaclass__('app',(),dict(app.__dict__))
 lite.app = app
 
 def lighten(app):
@@ -220,7 +220,7 @@ def lighten(app):
         def start_response(status, headers, exc_info=None):
             if exc_info:
                 try:
-                    if data: raise exc_info[0], exc_info[1], exc_info[2]
+                    if data: _raise(exc_info)
                 finally:
                     exc_info = None        # avoid dangling circular ref
             elif headerinfo and data:

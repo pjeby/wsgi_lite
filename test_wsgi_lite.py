@@ -6,11 +6,11 @@ def piglatin(text):
     (?! (?: the|\w{0,2})(?:\W|$)) # Don't match 'the' or two-letter words
     (\w*?)([aeiouy]\w*)
     (?= \W|$)   # End of word or string
-    """
+    """.encode('ascii')
     import re
     def cvt(m):
         pre, head, tail = m.groups()
-        return pre+tail+(head or 'w')+'ay'
+        return pre+tail+(head or 'w'.encode('ascii'))+'ay'.encode('ascii')
     return re.sub(pl_re, cvt, text)
     
 
@@ -68,8 +68,17 @@ def test(app, environ={}, form={}, _debug=True, **kw):
     import sys
     from wsgiref.util import setup_testing_defaults
     from wsgiref.handlers import BaseCGIHandler
-    from StringIO import StringIO
-    from urllib import quote_plus
+
+    try:
+        from StringIO import StringIO
+    except ImportError:
+        from io import BytesIO as StringIO
+
+    try:
+        from urllib import quote_plus
+    except ImportError:
+        from urllib.parse import quote_plus
+
 
     environ = environ.copy()
     for k, v in kw.items():
@@ -77,9 +86,6 @@ def test(app, environ={}, form={}, _debug=True, **kw):
             environ[k.replace('_','.',1)] = v
         else:
             environ[k] = v
-
-
-
     if form:
         encoded = []
         for k, v in form.items():
@@ -105,20 +111,24 @@ def test(app, environ={}, form={}, _debug=True, **kw):
                 try:
                     if stdout is not sys.__stdout__:
                         sys.stdout = sys.__stdout__
-                    import pdb
-                    pdb.post_mortem(sys.exc_info()[2])
+                    #import pdb
+                    #pdb.post_mortem(sys.exc_info()[2])
                 finally:
                     sys.stdout = stdout
             raise
+    def print_output(io):
+        b = io.getvalue()
+        if type(b) is not str: b = b.decode('latin-1')
+        print (b.replace('\r\n', '\n'))
 
     BaseCGIHandler(
         environ['wsgi.input'], stdout, stderr, environ,
         environ['wsgi.multithread'], environ['wsgi.multiprocess']
     ).run(wrapper)
-    print stdout.getvalue().replace('\r\n','\n')
+    print_output(stdout)
     if stderr.getvalue():
-        print "--- Log Output ---"
-        print stderr.getvalue().replace('\r\n','\n')
+        print ("--- Log Output ---")
+        print_output(stderr)
 
 
 def additional_tests():
@@ -145,19 +155,9 @@ def additional_tests():
     return doctest.DocFileSuite(
         optionflags = doctest.ELLIPSIS
                     | doctest.NORMALIZE_WHITESPACE
-                    | doctest.REPORT_ONLY_FIRST_FAILURE,
+                    , #| doctest.REPORT_ONLY_FIRST_FAILURE,
         *tests
     )
-
-
-
-
-
-
-
-
-
-
 
 
 
