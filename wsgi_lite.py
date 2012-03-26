@@ -331,7 +331,6 @@ def wrap_response(result, first=None, close=None):
         return result
     return ResponseWrapper(result, first, close)
 
-
 def get_closer(environ, chain=None):
     """Add a ``wsgi_lite.closing`` key and return a callback or None"""
 
@@ -350,6 +349,12 @@ def get_closer(environ, chain=None):
                 cleanups.pop().close()
         return close
 
+def wraps(app, **kw):
+    """@lite.wraps(wrapped_app, **kw) - create method-safe middleware"""
+    def wrap(func):
+        return maybe_rewrap(lite(app), kw and lite(**kw)(func) or lite(func))
+    return wrap 
+lite.wraps = wraps
 
 # Self-replacing stubs for binding support:
 def make_stub(name):
@@ -360,10 +365,5 @@ def make_stub(name):
 
 make_stub('with_bindings')
 make_stub('rebinder')
-
-
-
-
-
 
 

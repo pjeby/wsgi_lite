@@ -220,7 +220,7 @@ Now, ``@with_request`` will create a ``MyRequest`` instance wrapping the
 argument.
 
 The same approach can also be used to do things like accessing
-environment-cached objects, such as sessions::
+environment-cached objects, such as sessions or users::
 
     >>> class MySession(object):
     ...     def __init__(self, environ):
@@ -615,6 +615,61 @@ Your ``app`` method can optionally be wrapped with ``@lite`` to add bindings.
 And, if you want, you can override ``__init__(self, environ)`` to do some
 setup using the environment, before ``app`` is called.  (You can even use
 ``@bind`` to add extra arguments to ``__init__``, if you like.)
+
+
+Creating Custom Decorators for Middleware
+-----------------------------------------
+
+Earlier, we showed a ``latinator`` middleware function that could be used to
+wrap WSGI or WSGI Lite apps.  However, the way that function was written, it
+would only have been usable with functions, not method definitions.
+
+If you want to write a middleware function that's usable as a decorator with
+either regular functions or methods, use ``@lite.wraps`` as shown here::
+
+    >>> class User(object):
+    ...     @classmethod
+    ...     def bind(cls, environ):
+    ...         if 'myapp.authenticated_user' in environ:
+    ...             yield environ['myapp.authenticated_user']
+
+    >>> def require_authentication(app):
+    ...     @lite.wraps(app, user=User.bind)
+    ...     def wrapper(app, environ, user=None):
+    ...         if user is not None:
+    ...             return app(environ)
+    ...         else:
+    ...             XXX # return a login form response
+    ...     return wrapper
+
+    >>> class User(object):
+    ...     @classmethod
+    ...     @bind(session=MySession.bind)
+    ...     def bind(cls, environ, session):
+    ...         if 'user' in session:
+    ...             yield session['user']
+
+    >>> @require_authentication
+    ... def my_app(environ):
+    ...     """this code only runs if authenticated"""
+
+The idea in this example is that the ``@require_authentication`` decorator can
+now be used to wrap a function that uses the lite calling protocol.
+
+Notice that the wrapper function takes an extra positional argument *before* the
+environ.  The wrapper **must** use this argument as the app, in order to ensure
+that the decorator works equally well with methods, standalone functions,
+``___call__`` methods, etc.  (Basically, ``@lite.wraps`` gives you access to 
+the same transparent method vs. function support that ``@lite`` itself uses.)
+
+``@lite.wraps()`` takes exactly one positional argument: the app object
+the enclosing decorator will be wrapping.  As shown, it also accepts binding
+arguments as keywords, just like ``@lite``.  This allows our example to ask
+for an optional User object, whose presence it then checks for.
+
+If you use any additonal binding decorators (e.g. our earlier ``@with_routing``
+example), with your wrapper, they must appear **after** ``@lite.wraps()``
+(i.e., be inner decorators).  Otherwise, Bad Things Will Happen.
 
 
 Current Status

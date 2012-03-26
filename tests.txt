@@ -790,6 +790,12 @@ To make *instances* of a class lite, you decorate the __call__ method::
 To-Test
 =======
 
+lite.wraps:
+* with and without bindings
+* with and without lite-ed app
+* methods, classmethods and functions
+* error message for adding bindings outside @wraps
+
 Response Wrapping:
  * close() only happens once
  * len() passes through to wrapped iterator
