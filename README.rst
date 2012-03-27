@@ -627,12 +627,6 @@ would only have been usable with functions, not method definitions.
 If you want to write a middleware function that's usable as a decorator with
 either regular functions or methods, use ``@lite.wraps`` as shown here::
 
-    >>> class User(object):
-    ...     @classmethod
-    ...     def bind(cls, environ):
-    ...         if 'myapp.authenticated_user' in environ:
-    ...             yield environ['myapp.authenticated_user']
-
     >>> def require_authentication(app):
     ...     @lite.wraps(app, user=User.bind)
     ...     def wrapper(app, environ, user=None):
@@ -644,10 +638,9 @@ either regular functions or methods, use ``@lite.wraps`` as shown here::
 
     >>> class User(object):
     ...     @classmethod
-    ...     @bind(session=MySession.bind)
-    ...     def bind(cls, environ, session):
-    ...         if 'user' in session:
-    ...             yield session['user']
+    ...     def bind(cls, environ):
+    ...         if 'myapp.authenticated_user' in environ:
+    ...             yield environ['myapp.authenticated_user']
 
     >>> @require_authentication
     ... def my_app(environ):
@@ -669,7 +662,7 @@ for an optional User object, whose presence it then checks for.
 
 If you use any additonal binding decorators (e.g. our earlier ``@with_routing``
 example), with your wrapper, they must appear **after** (i.e., be closer to
-your ``def`` than)``@lite.wraps()``.  (Otherwise, they will be applied to the
+your ``def`` than) ``@lite.wraps()``.  (Otherwise, they will be applied to the
 *decorated application* instead of your middleware wrapper...  which is
 probably not what you want!)
 
@@ -679,9 +672,9 @@ Current Status
 
 The code in this repository is experi-mental, and possibly very-mental or
 just plain detri-mental.  It has not been seriously used or battle-hardened
-as yet, even though test coverage is now at 100%, and there are some fairly
-exhaustive WSGI compliance tests that exercise many obscure corners of the
-WSGI protocol.
+as yet, even though test coverage is now at 100% (except for a few new and
+still-experimental features), and there are some fairly exhaustive WSGI
+compliance tests that exercise many obscure corners of the WSGI protocol.
 
 Ironically enough, however, that may well mean that there is important "WSGI"
 code out there that **won't** work with this module yet, precisely because that
