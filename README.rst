@@ -647,24 +647,27 @@ either regular functions or methods, use ``@lite.wraps`` as shown here::
     ...     """this code only runs if authenticated"""
 
 The idea in this example is that the ``@require_authentication`` decorator can
-now be used to wrap a function that uses the lite calling protocol.
+now be used to wrap a function or method definition that uses the lite calling
+protocol.
 
 Notice that the wrapper function takes an extra positional argument *before* the
-environ.  The wrapper **must** use this argument as the app, in order to ensure
-that the decorator works equally well with methods, standalone functions,
-``___call__`` methods, etc.  (Basically, ``@lite.wraps`` gives you access to 
-the same transparent method vs. function support that ``@lite`` itself uses.)
+environ.  As long as the wrapper uses this argument instead of the object that
+was passed into ``@lite.wraps()``, then the resulting decorator will work
+equally well with methods, standalone functions, ``___call__`` methods, etc.
+(Basically, ``@lite.wraps`` gives you access to the same transparent method vs.
+function support that ``@lite`` itself uses.)
 
 ``@lite.wraps()`` takes exactly one positional argument: the app object
 the enclosing decorator will be wrapping.  As shown, it also accepts binding
-arguments as keywords, just like ``@lite``.  This allows our example to ask
-for an optional User object, whose presence it then checks for.
+arguments as keywords, just like ``@lite``.  (This allows our example to ask
+for an optional ``User`` object, whose presence it then checks for.)
 
-If you use any additonal binding decorators (e.g. our earlier ``@with_routing``
-example), with your wrapper, they must appear **after** (i.e., be closer to
-your ``def`` than) ``@lite.wraps()``.  (Otherwise, they will be applied to the
-*decorated application* instead of your middleware wrapper...  which is
-probably not what you want!)
+If you use any additonal binding decorators with your wrapper (like our earlier
+``@with_routing`` example), they must be placed **after** ``@lite.wraps()``
+(i.e., be closer to your ``def`` than it, so that they are invoked **first**).
+Otherwise, they will be applied to the *decorated application* instead of your
+middleware wrapper...  which is probably not what you want!
+
 
 
 Current Status
