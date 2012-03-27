@@ -668,8 +668,10 @@ arguments as keywords, just like ``@lite``.  This allows our example to ask
 for an optional User object, whose presence it then checks for.
 
 If you use any additonal binding decorators (e.g. our earlier ``@with_routing``
-example), with your wrapper, they must appear **after** ``@lite.wraps()``
-(i.e., be inner decorators).  Otherwise, Bad Things Will Happen.
+example), with your wrapper, they must appear **after** (i.e., be closer to
+your ``def`` than)``@lite.wraps()``.  (Otherwise, they will be applied to the
+*decorated application* instead of your middleware wrapper...  which is
+probably not what you want!)
 
 
 Current Status
