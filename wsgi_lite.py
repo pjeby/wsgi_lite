@@ -350,9 +350,9 @@ def get_closer(environ, chain=None):
         return close
 
 def wraps(app, **kw):
-    """@lite.wraps(wrapped_app, **kw) - create method-safe middleware"""
+    """@lite.wraps(func, **kw) - create method-safe lite-compatible decorators"""
     def wrap(func):
-        return maybe_rewrap(lite(app), kw and lite(**kw)(func) or lite(func))
+        return maybe_rewrap(app, kw and lite(**kw)(func) or lite(func))
     return wrap 
 lite.wraps = wraps
 
