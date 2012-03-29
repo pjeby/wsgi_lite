@@ -1,4 +1,5 @@
 __all__ = ['bind', 'with_bindings', 'iter_bindings']
+
 from wsgi_lite import maybe_rewrap, renamed, function
 import inspect
 basestring = getattr(__builtins__, 'basestring', str)
@@ -6,26 +7,36 @@ basestring = getattr(__builtins__, 'basestring', str)
 def iter_bindings(rule, environ):
     """Yield possible matches of binding rule `rule` against `environ`
 
-    A `rule` may be a string (``basestring`` instance), callable, or iterable.
+    A `rule` may be a string (instance of type ``str``), an object with a
+    ``__wsgi_bind__`` method, a callable, or an iterable.
+    
     If a string, it's looked up in `environ`, and the result yielded if found.
-    If it's a callable, it's invoked on the environ, and the result iterated
-    over.  (That is, the callable must return a possibly-empty sequence.)
+    If it has a ``__wsgi_bind__`` method, it's called (passing in the environ),
+    and the result iterated over.  (That is, the result must be a sequence or
+    generator, possibly empty.)  If the rule doesn't have a ``__wsgi_bind__``
+    method, but is callable, it's called in the same way.
+
     Otherwise, if the rule has an ``__iter__`` method, it's looped over, and
-    each element is treated as a rule, recursively.
+    each element is treated as a rule, recursively, and this function yields
+    all of the results.
     """
-    if isinstance(rule, basestring):
+    if type(rule) is str:
         if rule in environ:
             yield environ[rule]
+    elif hasattr(rule, '__wsgi_bind__'):
+        for result in rule.__wsgi_bind__(environ):
+            yield result
     elif callable(rule):
         for result in rule(environ):
             yield result
-    elif hasattr(rule, '__iter__'):
+    elif not isinstance(rule, basestring) and hasattr(rule, '__iter__'):
         for r in rule:
             for result in iter_bindings(r, environ):
                 yield result
     else:
         raise TypeError(
-            "binding rule %r is not an iterable, callable, or string" % (rule,)
+            "binding rule %r of %r has no __wsgi_bind__ method and is not"
+            " iterable, callable, or string" % (rule, type(rule))
         )
 
 def with_bindings(bindings, app, environ):
@@ -38,6 +49,7 @@ def with_bindings(bindings, app, environ):
     if args:
         return app(environ, **args)
     return app(environ)
+
 
 def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
     """Bind environ keys to keyword arguments on a lite-wrapped app"""
@@ -64,6 +76,10 @@ def rebinder(decorator, __name__=None, __doc__=None, __module__=None, **kw):
     decorate.__module__ = __module__
     return decorate
 
+
+
+
+
 def make_bindable(func):
     if not hasattr(func, '__wl_bind_info__'):
         bindings = {}
@@ -77,6 +93,31 @@ def make_bindable(func):
 def bind(__name__=None, __doc__=None, __module__=None, **kw):
     """Bind environment-based values to function keyword arguments"""
     return rebinder(make_bindable, __name__, __doc__, __module__, **kw)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

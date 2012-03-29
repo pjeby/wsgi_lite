@@ -142,11 +142,11 @@ But it is registered, if it does have one::
 And a ``wsgi_lite.closing`` extension is provided for the benefit of any child
 applications::
 
-    >>> class closable:
+    >>> class closable(object):
     ...     def __init__(self, msg):
     ...         self.msg = msg
     ...     def close(self):
-    ...         print self.msg
+    ...         print (self.msg)
 
     >>> def check_for_closing_extension(environ, start_response):
     ...     start_response('200 OK', [('Content-type','text/plain')])
@@ -168,7 +168,7 @@ applications::
     Hello, world!
     Closing extension found
     closing(x) returns x
-    <...closable instance at ...>
+    <...closable object at ...>
 
 Whereas calling the same function without ``lighten()`` doesn't end up with a
 closing extension::
@@ -267,7 +267,7 @@ implementation, if called from a standard WSGI server::
     <BLANKLINE>
     Hello, world!
     closing(x) returns x
-    <...closable instance at ...>
+    <...closable object at ...>
 
 But if called via the "lite" protocol, or with an existing "closing" extension,
 the built-in implementation won't be added::
@@ -279,12 +279,12 @@ the built-in implementation won't be added::
     >>> s, h
     ('200 OK', [('Content-type', 'text/plain')])
 
-    >>> print ''.join(b)
+    >>> print (''.join(b))
     Hello, world!
     None
 
     >>> to_close
-    [<...closable instance at ...>, <...closable instance at ...>]
+    [<...closable object at ...>, <...closable object at ...>]
 
     >>> [c.msg for c in to_close]
     ["Help, I'm being closed, too!", "I'll be closed first"]
@@ -501,13 +501,39 @@ and of course, you can have include the callables in sequences, too::
     >>> list(iter_bindings(['w', b, 'q'], dict(y=2, x=1, w=0, z=3)))
     [0, 1, 2, 3]
 
-But an object *must* be a ``basestring``, a ``callable()``, or have an
-``__iter__`` method, in order to be considered a rule::
+Objects with a ``__wsgi_bind__`` method have that method called, instead of
+calling the object itself::
+
+    >>> class Bound(object):
+    ...     def __init__(self, environ):
+    ...         print ("I am never called in this test")
+    ...
+    ...     __wsgi_bind__ = staticmethod(b) # normally, you'd use a classmethod
+    ...
+    ...     def __call__(self, environ):
+    ...         print ("I am never called either")
+
+    >>> list(iter_bindings(Bound, dict(y=2, x=1, w=0, z=3)))
+    [1, 2, 3]
+
+But an object *must* be a ``str``, a ``callable()``, or have ``__wsgi_bind__``
+or ``__iter__`` methods, in order to be considered a rule::
 
     >>> list(iter_bindings(1, dict()))
     Traceback (most recent call last):
       ...
-    TypeError: binding rule 1 is not an iterable, callable, or string
+    TypeError: binding rule 1 of <... 'int'> has no __wsgi_bind__ method and
+               is not iterable, callable, or string
+
+String subclasses are also unacceptable, since the WSGI environ always contains
+native string keys::
+
+    >>> class s(str): pass
+    >>> list(iter_bindings(s("xyz abc"), dict()))
+    Traceback (most recent call last):
+      ...
+    TypeError: binding rule 'xyz abc' of <... 's'> has no __wsgi_bind__
+               method and is not iterable, callable, or string
 
 
 ``with_bindings()``
@@ -568,7 +594,7 @@ But it's an error if the function lacks a matching argument name::
 Bindings can be stacked in any order, with the same result::
 
     >>> def f(environ, x, y="z"):
-    ...     print (x, y)
+    ...     print ((x, y))
 
     >>> bind(y='z')(bind(x='x')(f))(dict(x=1, z=2))
     (1, 2)
@@ -596,7 +622,7 @@ Unless it's redefined to an equal (==) value::
 Bindings can also be applied to methods::
 
     >>> def m(self, environ, x, y="z"):
-    ...     print (self, x, y)
+    ...     print ((self, x, y))
 
     >>> m = bind(y='z')(bind(x='x')(m))
 

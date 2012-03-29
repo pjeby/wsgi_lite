@@ -192,48 +192,65 @@ This will check the environment for the named extensions in the order listed,
 and replace `routing` with the first one matched.
 
 These argument specifications are called "binding rules", by the way.  A rule
-is either a string (i.e. an instance of ``basestring``), a callable object, or
-an iterable of rules (recursively).  Strings are looked up in the environ, and
-iterables are tried in sequence until a lookup succeeds.
+is either a WSGI native string (i.e. of exactly type ``str``), an object with a
+``__wsgi_bind__`` method, a callable object, or an iterable of rules
+(recursively).  Strings are looked up in the environ, and iterables are tried
+in sequence until a lookup succeeds.
 
-Callable rules, on the other hand, are looked up by being called with a
-single positional argument: the `environ` dictionary.  They must return an
-iterable (or sequence) yielding zero or more items.  Returning an empty
-sequence or yielding zero items means the lookup failed, and a default value
-should be used instead (or the next alternative binding rule provided for that
-keyword argument).  Otherwise, the first item yielded is passed in as the
-matching keyword argument.  Here's an example of using a classmethod as a
-callable binding rule::
+Rules with a ``__wsgi_bind__`` method, on the other hand, are looked up having
+that method called with a single positional argument: the `environ` dictionary.
+The method must return an iterable (or sequence) yielding zero or more items.
+(Which means it's usually simplest to implement as a generator).  Rules that
+don't have a ``__wsgi_bind__`` method, but are callable themselves, are called
+in the same way.  (Which means you don't need to write a class for each rule:
+functions and methods will also suffice.)
+
+Whether a rule has a ``__wsgi_bind__`` method or is a callable in its own
+right, returning an empty sequence or yielding zero items means the lookup
+failed, and a default value should be used instead (or the next alternative
+binding rule provided for that keyword argument).  Otherwise, the first item
+yielded is passed in as the matching keyword argument.  Here's an example of
+using a ``__wsgi_bind__`` classmethod, to turn a class into a binding rule::
 
     >>> class MyRequest(object):
     ...     def __init__(self, environ):
     ...         self.environ = environ
     ...
     ...     @classmethod
-    ...     def bind(cls, environ):
+    ...     def __wsgi_bind__(cls, environ):
     ...         yield cls(environ)
 
-    >>> with_request = lite(request=MyRequest.bind)
+    >>> with_request = lite(request=MyRequest)
 
 Now, ``@with_request`` will create a ``MyRequest`` instance wrapping the
 `environ` of the decorated function, and provide it via the ``request`` keyword
-argument.
+argument.  Or, you can explicitly specify what argument to use, by passing it
+to ``@lite()``.  So, these two examples do the same thing, just using different
+argument names::
 
-The same approach can also be used to do things like accessing
-environment-cached objects, such as sessions or users::
+    >>> @with_request
+    ... def app1(environ, request):
+    ...     """Just an example"""
+    
+    >>> @lite(req=MyRequest)
+    ... def app1(environ, req):
+    ...     """Just an example"""
+
+The same approach of creating environment-bound classes can also be used to do
+things like accessing environment-cached objects, such as sessions or users::
 
     >>> class MySession(object):
     ...     def __init__(self, environ):
     ...         self.environ = environ
     ...
     ...     @classmethod
-    ...     def bind(cls, environ):
+    ...     def __wsgi_bind__(cls, environ):
     ...         session = environ.get('myframework.MySession')
     ...         if session is None:
     ...             session = environ['myframework.MySession'] = cls(environ)
     ...         yield session
 
-    >>> with_session = lite(session=MySession.bind)
+    >>> with_session = lite(session=MySession)
 
 The possibilities are pretty much endless -- and much more in keeping with my
 original vision for how WSGI was supposed to help dissolve web frameworks into
@@ -250,8 +267,8 @@ request is finished::
     ...     closing = environ['wsgi_lite.closing']
     ...     yield closing(tempfile(etc[...]))
 
-    >>> @lite(tmp1=mktemp, tmp2=mktemp)
-    ... def do_something(environ, tmp1, tmp2):
+    >>> @lite(tmp1=mktemp, tmp2=mktemp, session=MySession)
+    ... def do_something(environ, tmp1, tmp2, session):
     ...     """Write stuff to tmp1 and tmp2"""
 
 You can even use argument bindings *in your binding functions*, using the
@@ -628,7 +645,7 @@ If you want to write a middleware function that's usable as a decorator with
 either regular functions or methods, use ``@lite.wraps`` as shown here::
 
     >>> def require_authentication(app):
-    ...     @lite.wraps(app, user=User.bind)
+    ...     @lite.wraps(app, user=User)
     ...     def wrapper(app, environ, user=None):
     ...         if user is not None:
     ...             return app(environ)
@@ -638,7 +655,7 @@ either regular functions or methods, use ``@lite.wraps`` as shown here::
 
     >>> class User(object):
     ...     @classmethod
-    ...     def bind(cls, environ):
+    ...     def __wsgi_bind__(cls, environ):
     ...         if 'myapp.authenticated_user' in environ:
     ...             yield environ['myapp.authenticated_user']
 
