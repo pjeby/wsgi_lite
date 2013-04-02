@@ -7,7 +7,7 @@ basestring = getattr(__builtins__, 'basestring', str)
 def iter_bindings(rule, environ):
     """Yield possible matches of binding rule `rule` against `environ`
 
-    A `rule` may be a string (instance of type ``str``), an object with a
+    A `rule` may be a string (object of exactly type ``str``), an object with a
     ``__wsgi_bind__`` method, a callable, or an iterable.
     
     If a string, it's looked up in `environ`, and the result yielded if found.

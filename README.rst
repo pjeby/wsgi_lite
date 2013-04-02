@@ -671,7 +671,7 @@ some kind of method.
 Notice that the wrapper function takes an extra positional argument *before*
 the environ.  As long as the wrapper uses this argument instead of the object
 that was passed into ``@lite.wraps()``, then the resulting decorator will work
-equally well with methods, standalone functions, ``___call__`` methods, etc.
+equally well with methods, standalone functions, ``__call__`` methods, etc.
 (Basically, ``@lite.wraps`` gives you access to the same transparent method vs.
 function support that ``@lite`` itself uses.)
 
