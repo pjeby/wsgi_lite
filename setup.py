@@ -11,7 +11,7 @@ except ImportError:
 
 # Metadata
 PACKAGE_NAME = "wsgi_lite"
-PACKAGE_VERSION = "0.5a2"
+PACKAGE_VERSION = "0.5a3"
 TESTS_REQUIRE = []
 
 import sys
