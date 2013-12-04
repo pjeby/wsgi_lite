@@ -42,8 +42,8 @@ are obtained from the WSGI environment (like WSGI server extensions or
 middleware-supplied parameters such as request or session objects).
 
 For more details, check out the `project's home page on BitBucket
-<https://bitbucket.org/pje/wsgi_lite/#toc>`_, and scroll down to the table
-of contents.
+<https://bitbucket.org/pje/wsgi_lite/#rst-header-toc>`_, and scroll down to the
+table of contents.
 
 WSGI Lite is currently only available for Python 2.x (tested w/2.3 up to 2.7)
 but the source should be quite portable to 3.x, as its magic is limited to
