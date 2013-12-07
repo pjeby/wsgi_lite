@@ -11,7 +11,7 @@ except ImportError:
 
 # Metadata
 PACKAGE_NAME = "wsgi_lite"
-PACKAGE_VERSION = "0.5a3"
+PACKAGE_VERSION = "0.5a3-1"
 TESTS_REQUIRE = []
 
 import sys
@@ -52,9 +52,9 @@ setup(
     license="ASF",
     test_suite = 'test_wsgi_lite',
     py_modules = ['wsgi_lite', 'wsgi_bindings'],
-    install_requires = [], tests_require = TESTS_REQUIRE
+    install_requires = [], setup_requires=['setuptools_hg'],
+    tests_require = TESTS_REQUIRE
 )
-
 
 
 
